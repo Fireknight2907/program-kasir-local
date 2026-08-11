@@ -1,0 +1,48 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model MenuItem {
+  id        Int         @id @default(autoincrement())
+  name      String
+  price     Int
+  image     String?
+  category  String?
+  createdAt DateTime    @default(now())
+  orderItems OrderItem[]
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  status    String   @default("open") // open, ordered, completed
+  total     Int      @default(0)
+  orders    Order[]
+}
+
+model Order {
+  id            Int         @id @default(autoincrement())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  createdAt     DateTime    @default(now())
+  total         Int         @default(0)
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id         Int      @id @default(autoincrement())
+  orderId    Int
+  order      Order    @relation(fields: [orderId], references: [id])
+  menuItemId Int
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int
+  price      Int // Price at the time of order
+}
