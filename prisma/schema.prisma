@@ -46,3 +46,13 @@ model OrderItem {
   quantity   Int
   price      Int // Price at the time of order
 }
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String?
+  role      String   @default("ADMIN") // ADMIN, USER
+  createdAt DateTime @default(now())
+}
+
