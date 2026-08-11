@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, use } from 'react';
-import { ShoppingCart, Plus, Minus, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils } from 'lucide-react';
+import Link from 'next/link';
 
 export default function OrderPage({ params }) {
   const { transactionId } = use(params);
-  
+
   const [menu, setMenu] = useState([]);
   const [transaction, setTransaction] = useState(null);
   const [cart, setCart] = useState({});
@@ -29,7 +30,7 @@ export default function OrderPage({ params }) {
         }
 
         const trxData = await trxRes.json();
-        
+
         if (trxData.status !== 'open') {
           if (trxData.status === 'ordered') {
             setOrdered(true);
@@ -37,12 +38,12 @@ export default function OrderPage({ params }) {
             setError('Transaksi ini sudah selesai.');
           }
         }
-        
+
         setTransaction(trxData);
-        
+
         const menuData = await menuRes.json();
         setMenu(menuData);
-        
+
       } catch (err) {
         setError('Terjadi kesalahan saat memuat data.');
       }
@@ -56,7 +57,7 @@ export default function OrderPage({ params }) {
     setCart(prev => {
       const currentQty = prev[item.id]?.quantity || 0;
       const newQty = Math.max(0, currentQty + delta);
-      
+
       const newCart = { ...prev };
       if (newQty === 0) {
         delete newCart[item.id];
@@ -73,7 +74,7 @@ export default function OrderPage({ params }) {
 
   const submitOrder = async () => {
     if (Object.keys(cart).length === 0) return;
-    
+
     setSubmitting(true);
     try {
       const items = Object.values(cart).map(item => ({
@@ -99,56 +100,126 @@ export default function OrderPage({ params }) {
     setSubmitting(false);
   };
 
-  if (loading) return <div className="container text-center mt-4"><p>Memuat menu...</p></div>;
-  if (error) return <div className="container text-center mt-4"><div className="glass-card"><h2 className="text-primary">{error}</h2></div></div>;
-  
+  if (loading) return <div className="container text-center mt-4"><p>Memuat menu restoran...</p></div>;
+  if (error) return (
+    <div className="container text-center mt-4">
+      <div className="glass-card" style={{ maxWidth: '500px', margin: '0 auto' }}>
+        <h2 className="text-primary">{error}</h2>
+        <p className="mt-4">Silakan hubungi kasir untuk mendapatkan QR Code baru.</p>
+      </div>
+    </div>
+  );
+
   if (ordered) {
     return (
       <div className="container text-center mt-4">
-        <div className="glass-card" style={{ maxWidth: '600px', margin: '0 auto' }}>
-          <CheckCircle size={64} className="text-primary mx-auto mb-4" style={{ margin: '0 auto', display: 'block', color: 'var(--secondary-color)' }} />
-          <h2>Pesanan Berhasil Diterima!</h2>
-          <p>Terima kasih! Pesanan Anda sedang disiapkan.</p>
-          <p>Silakan menuju kasir untuk melakukan pembayaran.</p>
+        <div className="glass-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem 2rem' }}>
+          <CheckCircle size={72} className="mx-auto mb-4" style={{ margin: '0 auto', display: 'block', color: 'var(--secondary-color)' }} />
+          <h2>Pesanan Berhasil Terkirim!</h2>
+          <p className="mt-2 mb-4" style={{ fontSize: '1.1rem' }}>
+            Terima kasih! Pesanan Anda telah masuk ke dapur dan sedang disiapkan.
+          </p>
+          <div style={{
+            background: 'rgba(0,0,0,0.05)',
+            padding: '1rem',
+            borderRadius: '12px',
+            marginBottom: '1.5rem',
+            textAlign: 'left'
+          }}>
+            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Detail Pembayaran:</p>
+            <p style={{ margin: 0, fontSize: '0.9rem' }}>Kode Transaksi: <code>{transactionId.substring(0, 8)}</code></p>
+            <p style={{ margin: 0, fontSize: '0.9rem' }}>Silakan selesaikan pembayaran di meja kasir setelah selesai makan.</p>
+          </div>
+          <Link href="/login" className="btn btn-outline" style={{ fontSize: '0.85rem' }}>
+            Masuk sebagai Admin / Kasir
+          </Link>
         </div>
       </div>
     );
   }
 
-  const categories = [...new Set(menu.map(item => item.category))];
+  const categories = [...new Set(menu.map(item => item.category || 'Umum'))];
 
   return (
-    <div style={{ paddingBottom: '100px' }}>
-      <div className="header-bar text-center justify-center">
+    <div style={{ paddingBottom: '120px' }}>
+      {/* Top Header Bar for User */}
+      <div className="header-bar flex justify-between items-center">
         <div>
-          <h2>Menu Kasir Pintar</h2>
-          <p>Pilih makanan dan minuman yang ingin Anda pesan</p>
+          <h2>Menu Makanan & Minuman</h2>
+          <p>Pilih hidangan favorit Anda untuk memesan</p>
         </div>
+        <Link href="/login" className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+          Kasir / Admin Login
+        </Link>
       </div>
 
+      {/* Menu Categories & Grid */}
       {categories.map(cat => (
         <div key={cat} className="mb-4">
-          <h3 style={{ padding: '0.5rem 1rem', background: 'var(--primary-color)', color: 'white', borderRadius: '8px', display: 'inline-block' }}>{cat}</h3>
-          <div className="grid grid-cols-3 mt-4">
-            {menu.filter(m => m.category === cat).map(item => (
-              <div key={item.id} className="glass-card flex flex-col justify-between">
-                <div>
-                  <h3 style={{ fontSize: '1.1rem' }}>{item.name}</h3>
-                  <p className="text-primary" style={{ fontWeight: 600, fontSize: '1.2rem' }}>
+          <div className="flex items-center gap-2 mb-4">
+            <Utensils size={20} className="text-primary" />
+            <h3 style={{
+              margin: 0,
+              padding: '0.4rem 1rem',
+              background: 'var(--primary-color)',
+              color: 'white',
+              borderRadius: '20px',
+              fontSize: '1rem',
+              fontWeight: 600
+            }}>
+              {cat}
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-3">
+            {menu.filter(m => (m.category || 'Umum') === cat).map(item => (
+              <div key={item.id} className="glass-card flex flex-col justify-between" style={{ overflow: 'hidden', padding: 0 }}>
+                {/* Image Section */}
+                <div style={{ position: 'relative', width: '100%', height: '180px', background: '#e2e8f0' }}>
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center" style={{ height: '100%', color: '#94a3b8' }}>
+                      <ImageIcon size={48} />
+                      <span style={{ fontSize: '0.8rem', marginTop: '0.4rem' }}>Foto Menu</span>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ padding: '1.25rem' }}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '0.25rem' }}>{item.name}</h3>
+                  <p className="text-primary" style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: 0 }}>
                     Rp {item.price.toLocaleString('id-ID')}
                   </p>
                 </div>
-                
-                <div className="flex items-center justify-between mt-4">
+
+                <div style={{ padding: '0 1.25rem 1.25rem 1.25rem' }}>
                   {cart[item.id] ? (
-                    <div className="flex items-center gap-2" style={{ width: '100%', justifyContent: 'space-between', background: 'rgba(0,0,0,0.05)', padding: '0.2rem', borderRadius: '8px' }}>
-                      <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => updateCart(item, -1)}><Minus size={16} /></button>
-                      <span style={{ fontWeight: 600 }}>{cart[item.id].quantity}</span>
-                      <button className="btn btn-primary" style={{ padding: '0.2rem 0.5rem' }} onClick={() => updateCart(item, 1)}><Plus size={16} /></button>
+                    <div className="flex items-center gap-2" style={{
+                      width: '100%',
+                      justify: 'space-between',
+                      background: 'rgba(99,102,241,0.1)',
+                      border: '1px solid var(--primary-color)',
+                      padding: '0.3rem 0.5rem',
+                      borderRadius: '8px'
+                    }}>
+                      <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem', border: 'none' }} onClick={() => updateCart(item, -1)}>
+                        <Minus size={16} />
+                      </button>
+                      <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--primary-color)' }}>
+                        {cart[item.id].quantity}
+                      </span>
+                      <button className="btn btn-primary" style={{ padding: '0.2rem 0.5rem' }} onClick={() => updateCart(item, 1)}>
+                        <Plus size={16} />
+                      </button>
                     </div>
                   ) : (
                     <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => updateCart(item, 1)}>
-                      Tambah
+                      <Plus size={16} style={{ marginRight: '6px' }} /> Tambah Pesanan
                     </button>
                   )}
                 </div>
@@ -158,6 +229,7 @@ export default function OrderPage({ params }) {
         </div>
       ))}
 
+      {/* Floating Bottom Cart Bar */}
       {Object.keys(cart).length > 0 && (
         <div style={{
           position: 'fixed',
@@ -165,25 +237,30 @@ export default function OrderPage({ params }) {
           left: 0,
           right: 0,
           background: 'var(--card-bg)',
-          backdropFilter: 'blur(12px)',
+          backdropFilter: 'blur(16px)',
           borderTop: 'var(--glass-border)',
-          boxShadow: '0 -4px 20px rgba(0,0,0,0.1)',
+          boxShadow: '0 -6px 24px rgba(0,0,0,0.15)',
           padding: '1rem 2rem',
           zIndex: 100
         }}>
-          <div className="container" style={{ padding: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="container" style={{ padding: 0, display: 'flex', justifyContent: 'space-between', items: 'center' }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.9rem' }}>Total Pesanan ({Object.values(cart).reduce((a, b) => a + b.quantity, 0)} item)</p>
-              <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>Rp {getCartTotal().toLocaleString('id-ID')}</h3>
+              <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.8 }}>
+                Total Pesanan ({Object.values(cart).reduce((a, b) => a + b.quantity, 0)} item)
+              </p>
+              <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '1.4rem', fontWeight: 800 }}>
+                Rp {getCartTotal().toLocaleString('id-ID')}
+              </h3>
             </div>
-            <button 
-              className="btn btn-primary" 
+            <button
+              className="btn btn-primary"
               onClick={submitOrder}
               disabled={submitting}
+              style={{ padding: '0.8rem 1.8rem', fontSize: '1.05rem' }}
             >
-              {submitting ? 'Memproses...' : (
+              {submitting ? 'Mengirim...' : (
                 <>
-                  <ShoppingCart size={18} style={{ marginRight: '8px' }} /> Kirim Pesanan
+                  <ShoppingCart size={20} style={{ marginRight: '8px' }} /> Kirim Pesanan Sekarang
                 </>
               )}
             </button>
