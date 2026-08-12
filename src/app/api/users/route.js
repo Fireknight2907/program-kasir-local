@@ -40,12 +40,15 @@ export async function POST(request) {
     // Generate custom employeeId (e.g., KSR-001)
     const count = await prisma.user.count();
     const employeeId = `KSR-${String(count + 1).padStart(3, '0')}`;
+    
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password || 'kasir123', 10);
 
     const user = await prisma.user.create({
       data: {
         employeeId,
         username,
-        password: password || 'kasir123', // Default password
+        password: hashedPassword, // Store hashed password
         name,
         ttl,
         phone,

@@ -121,21 +121,21 @@ export default function OrderPage({ params }) {
           </p>
           <div style={{
             background: 'rgba(0,0,0,0.05)',
-            padding: '1rem',
-            borderRadius: '12px',
+            padding: '1.5rem',
+            borderRadius: '16px',
             marginBottom: '1.5rem',
-            textAlign: 'left'
+            textAlign: 'center'
           }}>
-            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Detail Pembayaran:</p>
-            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary-color)' }}>
+            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Detail Pesanan:</p>
+            <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary-color)' }}>
               Nomor Meja: {transaction?.tableNumber || transactionId.split('-')[1] || '-'}
             </p>
-            <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.8 }}>Kode Transaksi: <code>{transactionId}</code></p>
-            <p style={{ marginTop: '0.4rem', marginBottom: 0, fontSize: '0.9rem' }}>Silakan selesaikan pembayaran di meja kasir setelah selesai makan.</p>
+            <p style={{ margin: '0.5rem 0', fontSize: '0.85rem', opacity: 0.8 }}>ID: <code>{transactionId}</code></p>
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>Mohon tunggu di meja Anda.</p>
+              <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.8 }}>Pembayaran dilakukan di meja kasir setelah selesai.</p>
+            </div>
           </div>
-          <Link href="/login" className="btn btn-outline" style={{ fontSize: '0.85rem' }}>
-            Masuk sebagai Admin / Kasir
-          </Link>
         </div>
       </div>
     );
@@ -146,28 +146,27 @@ export default function OrderPage({ params }) {
   return (
     <div style={{ paddingBottom: '120px' }}>
       {/* Top Header Bar for User */}
-      <div className="header-bar flex justify-between items-center flex-wrap gap-2">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
+      <div className="header-bar flex justify-between items-center flex-wrap gap-4" style={{ padding: '1.5rem', background: 'var(--card-bg)', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', borderRadius: '0 0 24px 24px', marginBottom: '2rem' }}>
+        <div style={{ width: '100%' }}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Menu Restoran</h2>
             <span style={{
               background: 'var(--primary-color)',
               color: 'white',
-              padding: '0.3rem 0.8rem',
-              borderRadius: '12px',
+              padding: '0.4rem 1rem',
+              borderRadius: '20px',
               fontWeight: 800,
-              fontSize: '1rem'
+              fontSize: '1.1rem',
+              boxShadow: '0 4px 12px rgba(99,102,241,0.3)'
             }}>
               MEJA {transaction?.tableNumber || transactionId.split('-')[1] || '-'}
             </span>
-            <h2 style={{ margin: 0 }}>Menu Makanan & Minuman</h2>
           </div>
-          <p style={{ margin: 0 }}>Pilih hidangan favorit Anda untuk memesan langsung dari meja ini</p>
+          <p style={{ margin: 0, opacity: 0.8, fontSize: '0.95rem' }}>Pilih hidangan favorit Anda untuk memesan langsung dari meja ini</p>
         </div>
-        <Link href="/login" className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
-          Kasir / Admin Login
-        </Link>
       </div>
 
+      <div className="container" style={{ padding: '0 1rem' }}>
       {/* Menu Categories & Grid */}
       {categories.map(cat => (
         <div key={cat} className="mb-4">
@@ -186,11 +185,11 @@ export default function OrderPage({ params }) {
             </h3>
           </div>
 
-          <div className="grid grid-cols-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: '1rem' }}>
             {menu.filter(m => (m.category || 'Umum') === cat).map(item => (
-              <div key={item.id} className="glass-card flex flex-col justify-between" style={{ overflow: 'hidden', padding: 0 }}>
+              <div key={item.id} className="glass-card flex flex-col justify-between" style={{ overflow: 'hidden', padding: 0, borderRadius: '16px' }}>
                 {/* Image Section */}
-                <div style={{ position: 'relative', width: '100%', height: '180px', background: '#e2e8f0' }}>
+                <div style={{ position: 'relative', width: '100%', height: '200px', background: '#f1f5f9' }}>
                   {item.image ? (
                     <img
                       src={item.image}
@@ -243,6 +242,7 @@ export default function OrderPage({ params }) {
           </div>
         </div>
       ))}
+      </div>
 
       {/* Floating Bottom Cart Bar */}
       {Object.keys(cart).length > 0 && (

@@ -18,14 +18,28 @@ export async function PUT(request) {
     const { oldPassword, newPassword } = await request.json();
 
     const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
+    if (!user) {
+      return NextResponse.json({ error: 'Pengguna tidak ditemukan' }, { status: 404 });
+    }
+
+    const bcrypt = require('bcryptjs');
+    let isMatch = false;
     
-    if (!user || user.password !== oldPassword) {
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      isMatch = await bcrypt.compare(oldPassword, user.password);
+    } else {
+      isMatch = user.password === oldPassword;
+    }
+
+    if (!isMatch) {
       return NextResponse.json({ error: 'Password lama salah' }, { status: 400 });
     }
 
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
     await prisma.user.update({
       where: { id: currentUser.id },
-      data: { password: newPassword }
+      data: { password: hashedNewPassword }
     });
 
     return NextResponse.json({ success: true });

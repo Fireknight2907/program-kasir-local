@@ -57,6 +57,7 @@ export default function CashierDashboard() {
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [editingEmployeeId, setEditingEmployeeId] = useState(null);
   const [employeeFormData, setEmployeeFormData] = useState({ username: '', password: '', name: '', ttl: '', phone: '', address: '' });
   const [employeeError, setEmployeeError] = useState('');
 
@@ -104,7 +105,10 @@ export default function CashierDashboard() {
     setLoadingTransactions(true);
     try {
       const today = getLocalDateString();
-      const res = await fetch(`/api/transaction?date=${today}`);
+      const res = await fetch(`/api/transaction?date=${today}`, { 
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const data = await res.json();
       if (Array.isArray(data)) {
         setTransactions(data);
@@ -120,7 +124,10 @@ export default function CashierDashboard() {
     setLoadingArchive(true);
     try {
       const dateToFetch = archiveDate || getLocalDateString();
-      const res = await fetch(`/api/transaction?date=${dateToFetch}`);
+      const res = await fetch(`/api/transaction?date=${dateToFetch}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const data = await res.json();
       if (Array.isArray(data)) {
         setArchiveTransactions(data);
@@ -185,8 +192,12 @@ export default function CashierDashboard() {
     e.preventDefault();
     setEmployeeError('');
     try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
+      const isEditing = !!editingEmployeeId;
+      const url = isEditing ? `/api/users/${editingEmployeeId}` : '/api/users';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(employeeFormData)
       });
@@ -195,7 +206,7 @@ export default function CashierDashboard() {
         fetchEmployees();
       } else {
         const data = await res.json();
-        setEmployeeError(data.error || 'Gagal menambah karyawan');
+        setEmployeeError(data.error || 'Gagal menyimpan data karyawan');
       }
     } catch (err) {
       setEmployeeError('Terjadi kesalahan');
@@ -1226,6 +1237,7 @@ export default function CashierDashboard() {
           <div className="flex justify-between items-center mb-4">
             <h2>Manajemen Karyawan & Kasir</h2>
             <button className="btn btn-primary" onClick={() => {
+              setEditingEmployeeId(null);
               setEmployeeFormData({ username: '', password: '', name: '', ttl: '', phone: '', address: '' });
               setEmployeeError('');
               setShowEmployeeModal(true);
@@ -1254,11 +1266,28 @@ export default function CashierDashboard() {
                     <p style={{ margin: 0, fontSize: '0.85rem' }}><strong>Alamat:</strong> {emp.address || '-'}</p>
                     <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.6, marginTop: '0.5rem' }}>Terdaftar: {new Date(emp.createdAt).toLocaleDateString('id-ID')}</p>
                   </div>
-                  {emp.role !== 'ADMIN' && (
-                    <button className="btn btn-danger mt-4" style={{ width: '100%', padding: '0.4rem' }} onClick={() => handleDeleteEmployee(emp.id)}>
-                      <Trash2 size={16} style={{ marginRight: '6px' }} /> Hapus Akun Kasir
+                  <div className="flex gap-2 mt-4">
+                    <button className="btn btn-outline" style={{ flex: 1, padding: '0.4rem' }} onClick={() => {
+                      setEditingEmployeeId(emp.id);
+                      setEmployeeFormData({
+                        username: emp.username,
+                        password: '', // Blank when editing
+                        name: emp.name || '',
+                        ttl: emp.ttl || '',
+                        phone: emp.phone || '',
+                        address: emp.address || ''
+                      });
+                      setEmployeeError('');
+                      setShowEmployeeModal(true);
+                    }}>
+                      <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit Data
                     </button>
-                  )}
+                    {emp.role !== 'ADMIN' && (
+                      <button className="btn btn-danger" style={{ flex: 1, padding: '0.4rem' }} onClick={() => handleDeleteEmployee(emp.id)}>
+                        <Trash2 size={16} style={{ marginRight: '6px' }} /> Hapus
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1269,7 +1298,7 @@ export default function CashierDashboard() {
             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
               <div className="glass-card" style={{ width: '100%', maxWidth: '500px', background: 'var(--bg-color)', maxHeight: '90vh', overflowY: 'auto' }}>
                 <div className="flex justify-between items-center mb-4">
-                  <h3>Tambah Akun Karyawan (Kasir)</h3>
+                  <h3>{editingEmployeeId ? 'Edit Data Karyawan' : 'Tambah Akun Karyawan (Kasir)'}</h3>
                   <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowEmployeeModal(false)}><X size={18} /></button>
                 </div>
                 {employeeError && <div style={{ padding: '0.6rem', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>{employeeError}</div>}
@@ -1283,8 +1312,8 @@ export default function CashierDashboard() {
                     <input type="text" className="input" placeholder="contoh: budi_kasir" value={employeeFormData.username} onChange={(e) => setEmployeeFormData({...employeeFormData, username: e.target.value.toLowerCase()})} required />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Password Awal (Default: kasir123)</label>
-                    <input type="text" className="input" placeholder="kasir123" value={employeeFormData.password} onChange={(e) => setEmployeeFormData({...employeeFormData, password: e.target.value})} />
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Password {editingEmployeeId ? '(Kosongkan jika tidak ingin diubah)' : 'Awal (Default: kasir123)'}</label>
+                    <input type="text" className="input" placeholder={editingEmployeeId ? "Kosongkan jika tetap" : "kasir123"} value={employeeFormData.password} onChange={(e) => setEmployeeFormData({...employeeFormData, password: e.target.value})} />
                   </div>
                   <div className="grid grid-cols-2" style={{ gap: '1rem' }}>
                     <div>

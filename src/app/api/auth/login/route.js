@@ -11,19 +11,31 @@ export async function POST(request) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { username },
+      where: { username: username.toLowerCase() }
     });
 
-    if (!user || user.password !== password) {
+    if (!user) {
       return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 });
     }
 
-    const userData = {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-    };
+    // Verify password with bcrypt, but also fallback to raw string for old unhashed passwords
+    const bcrypt = require('bcryptjs');
+    let isMatch = false;
+    
+    // Check if it's a bcrypt hash (starts with $2a$ or $2b$)
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      isMatch = await bcrypt.compare(password, user.password);
+    } else {
+      isMatch = user.password === password;
+      // Optionally could auto-hash it here to upgrade the user's password transparently
+    }
+
+    if (!isMatch) {
+      return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 });
+    }
+
+    // Remove password from payload
+    const { password: _, ...userData } = user;
 
     const cookieStore = await cookies();
     cookieStore.set({
