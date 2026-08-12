@@ -22,9 +22,31 @@ export async function POST(request) {
   }
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const dateParam = searchParams.get('date');
+
+    let whereClause = {};
+
+    if (dateParam) {
+      // Create start and end of the day for the given date
+      const startDate = new Date(dateParam);
+      startDate.setHours(0, 0, 0, 0);
+
+      const endDate = new Date(dateParam);
+      endDate.setHours(23, 59, 59, 999);
+
+      whereClause = {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        }
+      };
+    }
+
     const transactions = await prisma.transaction.findMany({
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       include: {
         orders: {

@@ -137,6 +137,9 @@ p { margin-bottom: 1rem; opacity: 0.9; }
 /* Utility */
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
+@media (min-width: 768px) {
+  .md\:flex-row { flex-direction: row !important; }
+}
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .justify-center { justify-content: center; }
@@ -161,6 +164,7 @@ p { margin-bottom: 1rem; opacity: 0.9; }
 .badge-open { background: #fef3c7; color: #d97706; }
 .badge-ordered { background: #dbeafe; color: #2563eb; }
 .badge-completed { background: #d1fae5; color: #059669; }
+.badge-danger { background: #fee2e2; color: #dc2626; }
 
 /* QR Code Container */
 .qr-container {
