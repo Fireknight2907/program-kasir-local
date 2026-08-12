@@ -191,3 +191,26 @@ p { margin-bottom: 1rem; opacity: 0.9; }
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 2rem;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-qr-card, .print-qr-card * {
+    visibility: visible;
+  }
+  .print-qr-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 2px dashed #000 !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: black !important;
+    padding: 2rem !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
