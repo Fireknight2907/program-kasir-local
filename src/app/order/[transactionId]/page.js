@@ -127,8 +127,11 @@ export default function OrderPage({ params }) {
             textAlign: 'left'
           }}>
             <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Detail Pembayaran:</p>
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>Kode Transaksi: <code>{transactionId.substring(0, 8)}</code></p>
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>Silakan selesaikan pembayaran di meja kasir setelah selesai makan.</p>
+            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary-color)' }}>
+              Nomor Meja: {transaction?.tableNumber || transactionId.split('-')[1] || '-'}
+            </p>
+            <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.8 }}>Kode Transaksi: <code>{transactionId}</code></p>
+            <p style={{ marginTop: '0.4rem', marginBottom: 0, fontSize: '0.9rem' }}>Silakan selesaikan pembayaran di meja kasir setelah selesai makan.</p>
           </div>
           <Link href="/login" className="btn btn-outline" style={{ fontSize: '0.85rem' }}>
             Masuk sebagai Admin / Kasir
@@ -143,10 +146,22 @@ export default function OrderPage({ params }) {
   return (
     <div style={{ paddingBottom: '120px' }}>
       {/* Top Header Bar for User */}
-      <div className="header-bar flex justify-between items-center">
+      <div className="header-bar flex justify-between items-center flex-wrap gap-2">
         <div>
-          <h2>Menu Makanan & Minuman</h2>
-          <p>Pilih hidangan favorit Anda untuk memesan</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span style={{
+              background: 'var(--primary-color)',
+              color: 'white',
+              padding: '0.3rem 0.8rem',
+              borderRadius: '12px',
+              fontWeight: 800,
+              fontSize: '1rem'
+            }}>
+              MEJA {transaction?.tableNumber || transactionId.split('-')[1] || '-'}
+            </span>
+            <h2 style={{ margin: 0 }}>Menu Makanan & Minuman</h2>
+          </div>
+          <p style={{ margin: 0 }}>Pilih hidangan favorit Anda untuk memesan langsung dari meja ini</p>
         </div>
         <Link href="/login" className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
           Kasir / Admin Login

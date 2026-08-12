@@ -19,6 +19,10 @@ export default function CashierDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [activeQr, setActiveQr] = useState(null);
+  const [showTableModal, setShowTableModal] = useState(false);
+  const [inputTableNumber, setInputTableNumber] = useState('');
+  const [tableModalError, setTableModalError] = useState('');
+  const [generatingQr, setGeneratingQr] = useState(false);
 
   // Menu management state
   const [menuList, setMenuList] = useState([]);
@@ -107,16 +111,45 @@ export default function CashierDashboard() {
     }
   };
 
-  const generateNewTransaction = async () => {
+  const openTableModal = () => {
+    setInputTableNumber('');
+    setTableModalError('');
+    setShowTableModal(true);
+  };
+
+  const handleCreateTransactionWithTable = async (e) => {
+    e.preventDefault();
+    if (!inputTableNumber.trim()) {
+      setTableModalError('Nomor meja wajib diisi.');
+      return;
+    }
+
+    setGeneratingQr(true);
+    setTableModalError('');
     try {
-      const res = await fetch('/api/transaction', { method: 'POST' });
+      const res = await fetch('/api/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableNumber: inputTableNumber.trim() })
+      });
       const data = await res.json();
-      const orderUrl = `${window.location.origin}/order/${data.id}`;
-      setActiveQr({ id: data.id, url: orderUrl });
-      fetchTransactions();
+      if (res.ok) {
+        const orderUrl = `${window.location.origin}/order/${data.id}`;
+        setActiveQr({
+          id: data.id,
+          tableNumber: data.tableNumber || inputTableNumber.trim(),
+          url: orderUrl
+        });
+        setShowTableModal(false);
+        fetchTransactions();
+      } else {
+        setTableModalError(data.error || 'Gagal membuat QR pesanan.');
+      }
     } catch (e) {
       console.error(e);
+      setTableModalError('Terjadi kesalahan server.');
     }
+    setGeneratingQr(false);
   };
 
   const completeTransaction = async (id) => {
@@ -302,26 +335,44 @@ export default function CashierDashboard() {
               <button className="btn btn-outline" onClick={fetchTransactions}>
                 <RefreshCcw size={18} style={{ marginRight: '8px' }} /> Refresh
               </button>
-              <button className="btn btn-primary" onClick={generateNewTransaction}>
+              <button className="btn btn-primary" onClick={openTableModal}>
                 <Plus size={18} style={{ marginRight: '8px' }} /> Buat QR Pesanan Baru
               </button>
             </div>
           </div>
 
           {activeQr && (
-            <div className="glass-card mb-4 flex flex-col items-center text-center">
-              <h2>QR Code Pesanan Baru</h2>
-              <p>Pelanggan (User) dapat langsung me-scan QR code ini untuk melihat menu & melakukan pemesanan.</p>
-              <div className="qr-container mt-4 mb-4">
+            <div className="glass-card print-qr-card mb-4 flex flex-col items-center text-center" style={{ border: '2px solid var(--primary-color)' }}>
+              <div style={{
+                background: 'var(--primary-color)',
+                color: 'white',
+                padding: '0.4rem 1.2rem',
+                borderRadius: '20px',
+                fontWeight: 800,
+                fontSize: '1.25rem',
+                marginBottom: '0.75rem',
+                display: 'inline-block'
+              }}>
+                MEJA {activeQr.tableNumber}
+              </div>
+              <h2 style={{ fontSize: '1.5rem', margin: 0 }}>QR Code Pesanan Meja {activeQr.tableNumber}</h2>
+              <p style={{ margin: '0.5rem 0', fontSize: '0.95rem' }}>Scan QR Code di bawah untuk melihat menu & melakukan pemesanan makanan/minuman.</p>
+              
+              <div className="qr-container mt-2 mb-2">
                 <QRCodeSVG value={activeQr.url} size={220} />
               </div>
-              <p style={{ fontSize: '0.85rem', wordBreak: 'break-all', opacity: 0.8, maxWidth: '400px' }}>
+              
+              <p style={{ fontSize: '0.85rem', wordBreak: 'break-all', opacity: 0.8, maxWidth: '450px', marginTop: '0.5rem' }}>
+                Kode Transaksi: <code>{activeQr.id}</code>
+              </p>
+              <p className="no-print" style={{ fontSize: '0.8rem', opacity: 0.7 }}>
                 URL: <a href={activeQr.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)' }}>{activeQr.url}</a>
               </p>
-              <div className="flex gap-4 mt-4">
+
+              <div className="flex gap-4 mt-4 no-print">
                 <button className="btn btn-outline" onClick={() => setActiveQr(null)}>Tutup</button>
                 <button className="btn btn-secondary" onClick={printQR}>
-                  <Printer size={18} style={{ marginRight: '8px' }} /> Cetak QR
+                  <Printer size={18} style={{ marginRight: '8px' }} /> Cetak QR Code Meja
                 </button>
               </div>
             </div>
@@ -334,8 +385,20 @@ export default function CashierDashboard() {
               {transactions.map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between">
                   <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3>ID: {trx.id.substring(0, 8)}...</h3>
+                    <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span style={{
+                          background: 'var(--primary-color)',
+                          color: 'white',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '8px',
+                          fontWeight: 700,
+                          fontSize: '0.85rem'
+                        }}>
+                          MEJA {trx.tableNumber || trx.id.split('-')[1] || '-'}
+                        </span>
+                        <h3 style={{ margin: 0, fontSize: '0.95rem' }}>ID: {trx.id.substring(0, 16)}...</h3>
+                      </div>
                       <span className={`badge badge-${trx.status}`}>
                         {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : 'Selesai'}
                       </span>
@@ -381,6 +444,76 @@ export default function CashierDashboard() {
               {transactions.length === 0 && !loadingTransactions && (
                 <p>Belum ada transaksi hari ini.</p>
               )}
+            </div>
+          )}
+
+          {/* Modal Dialog Input Nomor Meja */}
+          {showTableModal && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '1rem'
+            }}>
+              <div className="glass-card" style={{ width: '100%', maxWidth: '420px', background: 'var(--bg-color)', position: 'relative' }}>
+                <div className="flex justify-between items-center mb-4">
+                  <h3>Input Nomor Meja Customer</h3>
+                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowTableModal(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {tableModalError && (
+                  <div style={{
+                    padding: '0.6rem',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid #ef4444',
+                    color: '#ef4444',
+                    fontSize: '0.85rem',
+                    marginBottom: '1rem'
+                  }}>
+                    {tableModalError}
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateTransactionWithTable} className="flex flex-col gap-4">
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                      Nomor Meja Pelanggan *
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Contoh: 05, 12, A1..."
+                      value={inputTableNumber}
+                      onChange={(e) => setInputTableNumber(e.target.value)}
+                      autoFocus
+                      required
+                    />
+                    <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.4rem' }}>
+                      Nomor meja ini akan digunakan sebagai ID unik transaksi dan dicetak pada QR Code.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-4 justify-between mt-2">
+                    <button type="button" className="btn btn-outline" style={{ width: '40%' }} onClick={() => setShowTableModal(false)}>
+                      Batal
+                    </button>
+                    <button type="submit" className="btn btn-primary" style={{ width: '60%' }} disabled={generatingQr}>
+                      {generatingQr ? 'Membuat QR...' : 'Buat & Cetak QR'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </div>
