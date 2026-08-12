@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown
 } from 'lucide-react';
 
 export default function CashierDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'menu'
 
@@ -554,22 +555,44 @@ export default function CashierDashboard() {
           <h1>Kasir Pintar <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--primary-color)', background: 'rgba(99,102,241,0.1)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>{currentUser?.role === 'ADMIN' ? 'Admin Mode' : 'Kasir Mode'}</span></h1>
           <p>Kelola pesanan transaksi & daftar menu makanan/minuman</p>
         </div>
-        <div className="flex items-center gap-4">
-          <div 
-            style={{ fontSize: '0.9rem', textAlign: 'right', display: 'none', smDisplay: 'block', cursor: 'pointer', padding: '0.5rem', borderRadius: '8px', background: 'rgba(0,0,0,0.05)' }}
-            onClick={() => {
-              setPasswordError('');
-              setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-              setShowPasswordModal(true);
-            }}
-            title="Klik untuk ganti password"
+        <div style={{ position: 'relative' }}>
+          <button 
+            className="btn btn-outline flex items-center" 
+            style={{ gap: '8px', padding: '0.5rem 1rem' }}
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
           >
-            <span style={{ fontWeight: 600, display: 'block' }}>{currentUser?.name || 'Admin'} <Edit3 size={12} style={{ display: 'inline', opacity: 0.6 }} /></span>
-            <span style={{ opacity: 0.7, fontSize: '0.8rem' }}>Role: {currentUser?.role || 'ADMIN'}</span>
-          </div>
-          <button className="btn btn-danger" onClick={handleLogout} title="Keluar dari sistem">
-            <LogOut size={18} style={{ marginRight: '6px' }} /> Logout
+            <User size={18} /> 
+            <span style={{ fontWeight: 600 }}>{currentUser?.name || currentUser?.username || 'Akun'}</span>
+            <ChevronDown size={16} />
           </button>
+          
+          {showProfileMenu && (
+            <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: '0.5rem', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', width: '220px', zIndex: 50, padding: '0.5rem' }}>
+              <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem' }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem' }}>{currentUser?.name || currentUser?.username}</p>
+                <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>Role: {currentUser?.role || 'KASIR'}</p>
+              </div>
+              <button 
+                className="btn" 
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', color: 'var(--text-color)', padding: '0.5rem', display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  setPasswordError('');
+                  setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                  setShowPasswordModal(true);
+                }}
+              >
+                <Key size={16} style={{ marginRight: '8px' }} /> Ganti Password
+              </button>
+              <button 
+                className="btn" 
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', color: '#ef4444', padding: '0.5rem', display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}
+                onClick={handleLogout}
+              >
+                <LogOut size={16} style={{ marginRight: '8px' }} /> Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -748,21 +771,23 @@ export default function CashierDashboard() {
                         </button>
                       </>
                     )}
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => deleteTransaction(trx.id)}
-                      style={{ 
-                        fontSize: '0.85rem', 
-                        padding: '0.4rem', 
-                        width: '100%', 
-                        background: 'transparent', 
-                        color: '#ef4444', 
-                        border: '1px solid #ef4444',
-                        gridColumn: (trx.status === 'completed' || trx.status === 'cancelled') ? 'span 2' : 'span 1'
-                      }}
-                    >
-                      <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
-                    </button>
+                    {currentUser?.role === 'ADMIN' && (
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => deleteTransaction(trx.id)}
+                        style={{ 
+                          fontSize: '0.85rem', 
+                          padding: '0.4rem', 
+                          width: '100%', 
+                          background: 'transparent', 
+                          color: '#ef4444', 
+                          border: '1px solid #ef4444',
+                          gridColumn: (trx.status === 'completed' || trx.status === 'cancelled') ? 'span 2' : 'span 1'
+                        }}
+                      >
+                        <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
