@@ -26,23 +26,42 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get('date');
+    const tabParam = searchParams.get('tab');
 
     let whereClause = {};
 
     if (dateParam) {
-      // Create start and end of the day for the given date
+      // Handle UTC+8 timezone. 
+      // Example: For dateParam '2026-08-13', the start of day in UTC+8 is 2026-08-12T16:00:00.000Z
       const startDate = new Date(dateParam);
-      startDate.setHours(0, 0, 0, 0);
+      startDate.setUTCHours(-8, 0, 0, 0); // 00:00 UTC+8 is 16:00 UTC previous day
 
       const endDate = new Date(dateParam);
-      endDate.setHours(23, 59, 59, 999);
+      endDate.setUTCHours(23 - 8, 59, 59, 999); // 23:59 UTC+8 is 15:59 UTC
 
-      whereClause = {
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        }
-      };
+      if (tabParam === 'active') {
+        // Active tab: Show ALL open/ordered transactions, PLUS completed/cancelled today
+        whereClause = {
+          OR: [
+            { status: 'open' },
+            { status: 'ordered' },
+            {
+              createdAt: {
+                gte: startDate,
+                lte: endDate,
+              }
+            }
+          ]
+        };
+      } else {
+        // Archive tab: STRICTLY show transactions created on this date
+        whereClause = {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          }
+        };
+      }
     }
 
     const transactions = await prisma.transaction.findMany({

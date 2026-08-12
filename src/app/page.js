@@ -105,7 +105,7 @@ export default function CashierDashboard() {
     setLoadingTransactions(true);
     try {
       const today = getLocalDateString();
-      const res = await fetch(`/api/transaction?date=${today}`, { 
+      const res = await fetch(`/api/transaction?date=${today}&tab=active`, { 
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
       });
@@ -124,7 +124,7 @@ export default function CashierDashboard() {
     setLoadingArchive(true);
     try {
       const dateToFetch = archiveDate || getLocalDateString();
-      const res = await fetch(`/api/transaction?date=${dateToFetch}`, {
+      const res = await fetch(`/api/transaction?date=${dateToFetch}&tab=archive`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
       });
@@ -319,6 +319,19 @@ export default function CashierDashboard() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'cancelled' })
+      });
+      if (activeTab === 'transactions') fetchTransactions();
+      if (activeTab === 'archive') fetchArchive();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deleteTransaction = async (id) => {
+    if (!confirm('Yakin ingin menghapus transaksi ini secara permanen? Data tidak dapat dikembalikan.')) return;
+    try {
+      await fetch(`/api/transaction/${id}`, {
+        method: 'DELETE',
       });
       if (activeTab === 'transactions') fetchTransactions();
       if (activeTab === 'archive') fetchArchive();
@@ -708,34 +721,41 @@ export default function CashierDashboard() {
                       <Check size={18} style={{ marginRight: '8px' }} /> Tandai Selesai (Sudah Dibayar)
                     </button>
                   )}
-                  {trx.status !== 'completed' && trx.status !== 'cancelled' && (
-                    <div className="flex gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {trx.status !== 'completed' && trx.status !== 'cancelled' && (
                       <button
                         className="btn btn-outline"
                         onClick={() => showQRForTransaction(trx)}
-                        style={{ flex: 1, fontSize: '0.85rem', padding: '0.4rem' }}
+                        style={{ flex: '1 1 30%', fontSize: '0.85rem', padding: '0.4rem' }}
                         title="Tampilkan ulang QR Code"
                       >
                         <QrCode size={16} /> QR
                       </button>
-                      <button
-                        className="btn btn-outline"
-                        onClick={() => openEditOrderModal(trx)}
-                        style={{ flex: 2, fontSize: '0.85rem', padding: '0.4rem' }}
-                      >
-                        <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit Pesanan
-                      </button>
-                    </div>
-                  )}
-                  {trx.status !== 'completed' && trx.status !== 'cancelled' && (
+                    )}
                     <button
-                      className="btn btn-danger mt-2"
-                      onClick={() => cancelTransaction(trx.id)}
-                      style={{ width: '100%', fontSize: '0.85rem', padding: '0.4rem' }}
+                      className="btn btn-outline"
+                      onClick={() => openEditOrderModal(trx)}
+                      style={{ flex: '1 1 40%', fontSize: '0.85rem', padding: '0.4rem' }}
                     >
-                      <X size={16} style={{ marginRight: '6px' }} /> Batalkan Pesanan
+                      <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit Pesanan
                     </button>
-                  )}
+                    {trx.status !== 'completed' && trx.status !== 'cancelled' && (
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => cancelTransaction(trx.id)}
+                        style={{ flex: '1 1 100%', fontSize: '0.85rem', padding: '0.4rem' }}
+                      >
+                        <X size={16} style={{ marginRight: '6px' }} /> Batalkan
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => deleteTransaction(trx.id)}
+                      style={{ flex: '1 1 100%', fontSize: '0.85rem', padding: '0.4rem', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
+                    >
+                      <Trash2 size={16} style={{ marginRight: '6px' }} /> Hapus Permanen
+                    </button>
+                  </div>
                 </div>
               ))}
               {transactions.length === 0 && !loadingTransactions && (
@@ -977,10 +997,27 @@ export default function CashierDashboard() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-4" style={{ fontStyle: 'italic', opacity: 0.7 }}>Belum ada pesanan.</p>
-                    )}
+                        <p className="mt-4" style={{ fontStyle: 'italic', opacity: 0.7 }}>Belum ada pesanan.</p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => openEditOrderModal(trx)}
+                        style={{ flex: '1 1 45%', fontSize: '0.85rem', padding: '0.4rem' }}
+                      >
+                        <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => deleteTransaction(trx.id)}
+                        style={{ flex: '1 1 45%', fontSize: '0.85rem', padding: '0.4rem' }}
+                      >
+                        <Trash2 size={16} style={{ marginRight: '6px' }} /> Hapus
+                      </button>
+                    </div>
                   </div>
-                </div>
               ))}
               {archiveTransactions.length === 0 && !loadingArchive && (
                 <p>Tidak ada transaksi pada tanggal {archiveDate}.</p>

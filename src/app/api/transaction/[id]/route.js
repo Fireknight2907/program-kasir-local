@@ -44,3 +44,29 @@ export async function PUT(request, { params }) {
     return NextResponse.json({ error: 'Failed to update transaction' }, { status: 500 });
   }
 }
+
+export async function DELETE(request, { params }) {
+  const { id } = await params;
+  try {
+    // Delete all OrderItems that belong to Orders that belong to this Transaction
+    const orders = await prisma.order.findMany({ where: { transactionId: id } });
+    const orderIds = orders.map(o => o.id);
+    
+    if (orderIds.length > 0) {
+      await prisma.orderItem.deleteMany({
+        where: { orderId: { in: orderIds } }
+      });
+      await prisma.order.deleteMany({
+        where: { transactionId: id }
+      });
+    }
+
+    await prisma.transaction.delete({
+      where: { id }
+    });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Delete error:', error);
+    return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 });
+  }
+}
