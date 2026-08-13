@@ -1075,7 +1075,7 @@ export default function CashierDashboard() {
       {activeTab === 'menu' && (
         <div>
           <div className="flex justify-between items-center mb-4" style={{ flexWrap: 'wrap', gap: '1rem' }}>
-            <h2>Daftar Menu Restauran</h2>
+            <h2>Daftar Menu Restoran</h2>
             <div className="flex gap-4 items-center" style={{ flexWrap: 'wrap' }}>
               <div style={{ position: 'relative', minWidth: '240px' }}>
                 <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
@@ -1089,9 +1089,20 @@ export default function CashierDashboard() {
                 />
               </div>
               {currentUser?.role === 'ADMIN' && (
-                <button className="btn btn-primary" onClick={openAddModal}>
-                  <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Menu Baru
-                </button>
+                <div className="flex gap-2">
+                  <button className="btn btn-outline" onClick={() => {
+                    const newCat = window.prompt('Masukkan nama kategori baru:');
+                    if (newCat && newCat.trim()) {
+                      setCustomCategories(prev => [...prev, newCat.trim()]);
+                      alert(`Kategori "${newCat.trim()}" berhasil ditambahkan. Silakan gunakan saat menambah menu.`);
+                    }
+                  }}>
+                    <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Kategori
+                  </button>
+                  <button className="btn btn-primary" onClick={openAddModal}>
+                    <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Menu Baru
+                  </button>
+                </div>
               )}
             </div>
           </div>
