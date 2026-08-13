@@ -50,6 +50,7 @@ export default function CashierDashboard() {
     category: 'Makanan',
     image: '',
   });
+  const [customCategories, setCustomCategories] = useState([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -1227,25 +1228,39 @@ export default function CashierDashboard() {
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
-                        Kategori
-                      </label>
-                      <input
-                        type="text"
-                        list="kategori-menu"
+                      <div className="flex justify-between items-center mb-1">
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>
+                          Kategori
+                        </label>
+                        <button 
+                          type="button" 
+                          style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                          onClick={() => {
+                            const newCat = window.prompt('Masukkan nama kategori baru:');
+                            if (newCat && newCat.trim()) {
+                              const catName = newCat.trim();
+                              setCustomCategories(prev => [...prev, catName]);
+                              setFormData(prev => ({ ...prev, category: catName }));
+                            }
+                          }}
+                        >
+                          + Tambah Kategori
+                        </button>
+                      </div>
+                      <select
                         className="input"
-                        placeholder="Contoh: Makanan, Minuman"
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                         required
-                      />
-                      <datalist id="kategori-menu">
-                        <option value="Makanan" />
-                        <option value="Minuman" />
-                        <option value="Dessert" />
-                        <option value="Cemilan" />
-                        <option value="Tambahan" />
-                      </datalist>
+                      >
+                        {[...new Set([
+                          'Makanan', 'Minuman', 'Dessert', 'Cemilan', 'Tambahan',
+                          ...menuList.map(m => m.category).filter(Boolean),
+                          ...customCategories
+                        ])].map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
