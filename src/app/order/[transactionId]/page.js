@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from 'react';
-import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils, Search } from 'lucide-react';
 import Link from 'next/link';
 
 export default function OrderPage({ params }) {
@@ -14,6 +14,7 @@ export default function OrderPage({ params }) {
   const [submitting, setSubmitting] = useState(false);
   const [ordered, setOrdered] = useState(false);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -136,12 +137,29 @@ export default function OrderPage({ params }) {
               <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.8 }}>Pembayaran dilakukan di meja kasir setelah selesai.</p>
             </div>
           </div>
+          
+          <button 
+            className="btn btn-outline" 
+            style={{ padding: '0.8rem 2rem', fontWeight: 600 }}
+            onClick={() => {
+              setOrdered(false);
+              setCart({});
+            }}
+          >
+            <Plus size={18} style={{ display: 'inline', marginRight: '8px' }} />
+            Pesan Lagi (Tambahan)
+          </button>
         </div>
       </div>
     );
   }
 
-  const categories = [...new Set(menu.map(item => item.category || 'Umum'))];
+  const filteredMenu = menu.filter(item => 
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (item.category && item.category.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+  
+  const categories = [...new Set(filteredMenu.map(item => item.category || 'Umum'))];
 
   return (
     <div style={{ paddingBottom: '120px' }}>
@@ -163,6 +181,19 @@ export default function OrderPage({ params }) {
             </span>
           </div>
           <p style={{ margin: 0, opacity: 0.8, fontSize: '0.95rem' }}>Pilih hidangan favorit Anda untuk memesan langsung dari meja ini</p>
+        </div>
+        
+        {/* Search Bar */}
+        <div style={{ width: '100%', position: 'relative', marginTop: '0.5rem' }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, color: 'var(--text-color)' }} />
+          <input
+            type="text"
+            className="input"
+            placeholder="Cari makanan atau minuman..."
+            style={{ paddingLeft: '2.5rem', width: '100%', borderRadius: '12px', background: 'rgba(255,255,255,0.8)' }}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
@@ -186,15 +217,15 @@ export default function OrderPage({ params }) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: '1rem' }}>
-            {menu.filter(m => (m.category || 'Umum') === cat).map(item => (
+            {filteredMenu.filter(m => (m.category || 'Umum') === cat).map(item => (
               <div key={item.id} className="glass-card flex flex-col justify-between" style={{ overflow: 'hidden', padding: 0, borderRadius: '16px' }}>
                 {/* Image Section */}
-                <div style={{ position: 'relative', width: '100%', height: '200px', background: '#f1f5f9' }}>
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', background: '#f8fafc', padding: '1rem' }}>
                   {item.image ? (
                     <img
                       src={item.image}
                       alt={item.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center" style={{ height: '100%', color: '#94a3b8' }}>

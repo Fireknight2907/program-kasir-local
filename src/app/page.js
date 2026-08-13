@@ -714,14 +714,19 @@ export default function CashierDashboard() {
                       <div className="mt-4">
                         <p style={{ fontWeight: 600 }}>Daftar Pesanan:</p>
                         <ul style={{ paddingLeft: '1rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
-                          {trx.orders.map(order =>
-                            order.items.map(item => (
-                              <li key={item.id} style={{ marginBottom: '0.25rem' }}>
-                                {item.quantity}x {item.menuItem?.name || 'Item'}
-                                <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                              </li>
-                            ))
-                          )}
+                          {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
+                            <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                              {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
+                              <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                {order.items.map(item => (
+                                  <li key={item.id} style={{ marginBottom: '0.25rem' }}>
+                                    {item.quantity}x {item.menuItem?.name || 'Item'}
+                                    <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
                         </ul>
                         <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
                           <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
@@ -1013,14 +1018,19 @@ export default function CashierDashboard() {
                     {trx.orders && trx.orders.length > 0 ? (
                       <div className="mt-4">
                         <ul style={{ paddingLeft: '1rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
-                          {trx.orders.map(order =>
-                            order.items.map(item => (
-                              <li key={item.id} style={{ marginBottom: '0.25rem' }}>
-                                {item.quantity}x {item.menuItem?.name || 'Item'}
-                                <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                              </li>
-                            ))
-                          )}
+                          {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
+                            <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                              {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
+                              <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                {order.items.map(item => (
+                                  <li key={item.id} style={{ marginBottom: '0.25rem' }}>
+                                    {item.quantity}x {item.menuItem?.name || 'Item'}
+                                    <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
                         </ul>
                         <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
                           <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
@@ -1077,9 +1087,11 @@ export default function CashierDashboard() {
                   onChange={(e) => setMenuSearch(e.target.value)}
                 />
               </div>
-              <button className="btn btn-primary" onClick={openAddModal}>
-                <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Menu Baru
-              </button>
+              {currentUser?.role === 'ADMIN' && (
+                <button className="btn btn-primary" onClick={openAddModal}>
+                  <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Menu Baru
+                </button>
+              )}
             </div>
           </div>
 
@@ -1089,12 +1101,12 @@ export default function CashierDashboard() {
             <div className="grid grid-cols-3">
               {filteredMenu.map(item => (
                 <div key={item.id} className="glass-card flex flex-col justify-between" style={{ overflow: 'hidden', padding: 0 }}>
-                  <div style={{ position: 'relative', width: '100%', height: '180px', background: '#e2e8f0' }}>
+                  <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', background: '#f8fafc', padding: '1rem' }}>
                     {item.image ? (
                       <img
                         src={item.image}
                         alt={item.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center" style={{ height: '100%', color: '#94a3b8' }}>
@@ -1126,12 +1138,18 @@ export default function CashierDashboard() {
                   </div>
 
                   <div className="flex gap-2" style={{ padding: '0 1.25rem 1.25rem 1.25rem' }}>
-                    <button className="btn btn-outline" style={{ flex: 1, padding: '0.4rem' }} onClick={() => openEditModal(item)}>
-                      <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit
-                    </button>
-                    <button className="btn btn-danger" style={{ padding: '0.4rem 0.75rem' }} onClick={() => handleDeleteMenu(item.id, item.name)}>
-                      <Trash2 size={16} />
-                    </button>
+                    {currentUser?.role === 'ADMIN' ? (
+                      <>
+                        <button className="btn btn-outline" style={{ flex: 1, padding: '0.4rem' }} onClick={() => openEditModal(item)}>
+                          <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit
+                        </button>
+                        <button className="btn btn-danger" style={{ padding: '0.4rem 0.75rem' }} onClick={() => handleDeleteMenu(item.id, item.name)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{ padding: '0.4rem 0', opacity: 0.6, fontSize: '0.85rem' }}>Hanya Admin yang dapat mengedit menu</div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1212,16 +1230,22 @@ export default function CashierDashboard() {
                       <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
                         Kategori
                       </label>
-                      <select
+                      <input
+                        type="text"
+                        list="kategori-menu"
                         className="input"
+                        placeholder="Contoh: Makanan, Minuman"
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      >
-                        <option value="Makanan">Makanan</option>
-                        <option value="Minuman">Minuman</option>
-                        <option value="Dessert">Dessert</option>
-                        <option value="Tambahan">Tambahan</option>
-                      </select>
+                        required
+                      />
+                      <datalist id="kategori-menu">
+                        <option value="Makanan" />
+                        <option value="Minuman" />
+                        <option value="Dessert" />
+                        <option value="Cemilan" />
+                        <option value="Tambahan" />
+                      </datalist>
                     </div>
                   </div>
 

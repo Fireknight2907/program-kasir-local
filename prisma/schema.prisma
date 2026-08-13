@@ -12,12 +12,12 @@ datasource db {
 }
 
 model MenuItem {
-  id        Int         @id @default(autoincrement())
-  name      String
-  price     Int
-  image     String?
-  category  String?
-  createdAt DateTime    @default(now())
+  id         Int         @id @default(autoincrement())
+  name       String
+  price      Int
+  image      String?
+  category   String?
+  createdAt  DateTime    @default(now())
   orderItems OrderItem[]
 }
 
@@ -55,10 +55,9 @@ model User {
   username   String   @unique
   password   String
   name       String?
-  ttl        String?  // Tempat, Tanggal Lahir
+  ttl        String? // Tempat, Tanggal Lahir
   phone      String?
   address    String?
   role       String   @default("KASIR") // ADMIN, KASIR
   createdAt  DateTime @default(now())
 }
-
