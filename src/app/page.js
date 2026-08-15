@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, FileText
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -138,6 +138,54 @@ export default function CashierDashboard() {
       console.error(e);
     }
     setLoadingArchive(false);
+  };
+
+  // Calculate Daily Recap for Archive Transactions
+  const calculateDailyRecap = () => {
+    const validTrxs = archiveTransactions.filter(trx => trx.status !== 'cancelled');
+    let totalRevenue = 0;
+    let totalItemsSold = 0;
+    const itemMap = {};
+
+    validTrxs.forEach(trx => {
+      if (trx.orders && Array.isArray(trx.orders)) {
+        trx.orders.forEach(order => {
+          if (order.items && Array.isArray(order.items)) {
+            order.items.forEach(item => {
+              const name = item.menuItem?.name || 'Item Tidak Dikenal';
+              const qty = Number(item.quantity) || 0;
+              const price = Number(item.price) || 0;
+              const itemTotal = qty * price;
+
+              totalItemsSold += qty;
+              totalRevenue += itemTotal;
+
+              if (!itemMap[name]) {
+                itemMap[name] = {
+                  name,
+                  category: item.menuItem?.category || 'Lainnya',
+                  quantity: 0,
+                  totalRevenue: 0,
+                  unitPrice: price,
+                };
+              }
+              itemMap[name].quantity += qty;
+              itemMap[name].totalRevenue += itemTotal;
+            });
+          }
+        });
+      }
+    });
+
+    const itemList = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity);
+
+    return {
+      totalRevenue,
+      totalItemsSold,
+      totalTransactions: validTrxs.length,
+      totalCancelled: archiveTransactions.filter(trx => trx.status === 'cancelled').length,
+      itemList,
+    };
   };
 
   // Fetch menu items
@@ -992,8 +1040,121 @@ export default function CashierDashboard() {
           {loadingArchive ? (
             <p>Memuat data arsip transaksi...</p>
           ) : (
-            <div className="grid grid-cols-2">
-              {archiveTransactions.map(trx => (
+            <>
+              {/* REKAPAN PENJUALAN HARIAN */}
+              {(() => {
+                const recap = calculateDailyRecap();
+                return (
+                  <div className="glass-card mb-6 p-6" style={{ background: 'var(--card-bg, rgba(255,255,255,0.85))', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
+                    <div className="flex justify-between items-center mb-4 pb-3" style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <div className="flex items-center gap-3">
+                        <div style={{ background: 'var(--primary-color)', color: 'white', padding: '0.6rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FileText size={22} />
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Rekapan Penjualan Harian</h3>
+                          <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.7 }}>
+                            Tanggal: {archiveDate ? new Date(archiveDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="badge badge-success" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+                          {recap.totalTransactions} Transaksi Selesai
+                        </span>
+                        {recap.totalCancelled > 0 && (
+                          <span className="badge badge-danger" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+                            {recap.totalCancelled} Dibatalkan
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stat Summary Cards */}
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                      <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>Total Pendapatan Harian</p>
+                        <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#1d4ed8' }}>
+                          Rp {recap.totalRevenue.toLocaleString('id-ID')}
+                        </h3>
+                      </div>
+                      <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#059669', fontWeight: 600 }}>Total Item / Makanan Terjual</p>
+                        <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#047857' }}>
+                          {recap.totalItemsSold} <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>item</span>
+                        </h3>
+                      </div>
+                      <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#d97706', fontWeight: 600 }}>Total Variasi Menu Laku</p>
+                        <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#b45309' }}>
+                          {recap.itemList.length} <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>menu</span>
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Table of Sales per Menu */}
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Utensils size={18} /> Rincian Penjualan Per Menu Makanan / Minuman
+                      </h4>
+                      {recap.itemList.length > 0 ? (
+                        <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                            <thead>
+                              <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                                <th style={{ padding: '0.75rem 1rem', width: '50px' }}>No</th>
+                                <th style={{ padding: '0.75rem 1rem' }}>Nama Makanan / Item</th>
+                                <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Total Terjual (Porsi)</th>
+                                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Harga Satuan</th>
+                                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Total Uang Didapatkan</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {recap.itemList.map((item, idx) => (
+                                <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                                  <td style={{ padding: '0.7rem 1rem', fontWeight: 600, opacity: 0.6 }}>{idx + 1}</td>
+                                  <td style={{ padding: '0.7rem 1rem', fontWeight: 600 }}>{item.name}</td>
+                                  <td style={{ padding: '0.7rem 1rem', textAlign: 'center' }}>
+                                    <span style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', padding: '0.25rem 0.65rem', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem' }}>
+                                      {item.quantity}x
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.7rem 1rem', textAlign: 'right', opacity: 0.8 }}>
+                                    Rp {item.unitPrice.toLocaleString('id-ID')}
+                                  </td>
+                                  <td style={{ padding: '0.7rem 1rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary-color)' }}>
+                                    Rp {item.totalRevenue.toLocaleString('id-ID')}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                                <td colSpan={2} style={{ padding: '0.85rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN (1 HARI)</td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
+                                  {recap.totalItemsSold} Item
+                                </td>
+                                <td></td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
+                                  Rp {recap.totalRevenue.toLocaleString('id-ID')}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      ) : (
+                        <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1rem 0' }}>
+                          Belum ada transaksi penjualan pada tanggal ini.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <h3 className="mb-4 mt-6" style={{ fontSize: '1.1rem', fontWeight: 700 }}>Daftar Transaksi Individual ({archiveTransactions.length})</h3>
+              <div className="grid grid-cols-2">
+                {archiveTransactions.map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between" style={{ opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
                   <div>
                     <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -1067,6 +1228,7 @@ export default function CashierDashboard() {
                 <p>Tidak ada transaksi pada tanggal {archiveDate}.</p>
               )}
             </div>
+            </>
           )}
         </div>
       )}
