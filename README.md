@@ -1,7 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
 https://program-kasir-local-bice.vercel.app/
 
+- transaksi yang terjadi perhari dan besoknya akan direset
+- buat rekapan setiap hari✅
+- gambar yang ditampilkan tidak akan stretch
+- saat print barcode menampilkan (barcode, tanggal, nomor meja) ✅ sisa tambah tanggal
+- ID diganti menjadi nomor ✅
+- UI diperbagus
+- tambah user Admin ✅
+- tambah fitur cancel order✅
+- fitur take away untuk Admin
+- tambah fitur admin dan kasir ✅ masih perlu di improve
+- tambah fitur edit pesanan ✅
+- fitur untuk seluruh order yang terjadi di meja yang sama masuk ke dalam orderan meja yang sama sebelum membayar
+- tambah fitur kategori menu
+- fitur untuk admin bisa tambah kategori menu✅
+- hapus fitur tambah menu untuk kasir✅
+- tambah fitur download excel untuk rekapan✅
+
+## Update
+8/15
+tambah fitur rekapan dan download Excel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
