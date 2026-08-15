@@ -204,10 +204,10 @@ export default function CashierDashboard() {
         [`Tanggal: ${formattedDateStr}`],
         [],
         ['RINGKASAN'],
-        ['Total Pendapatan Harian', `Rp ${recap.totalRevenue.toLocaleString('id-ID')}`],
-        ['Total Item / Makanan Terjual', `${recap.totalItemsSold} item`],
-        ['Total Variasi Menu Laku', `${recap.itemList.length} menu`],
-        ['Total Transaksi Selesai', `${recap.totalTransactions} transaksi`],
+        ['Total Pendapatan Harian', '', `Rp ${recap.totalRevenue.toLocaleString('id-ID')}`],
+        ['Total Item / Makanan Terjual', '', `${recap.totalItemsSold} item`],
+        ['Total Variasi Menu Laku', '', `${recap.itemList.length} menu`],
+        ['Total Transaksi Selesai', '', `${recap.totalTransactions} transaksi`],
         [],
         ['RINCIAN PENJUALAN PER MENU'],
         ['No', 'Nama Makanan / Item', 'Kategori', 'Total Terjual (Porsi)', 'Harga Satuan (Rp)', 'Total Pendapatan Menu (Rp)']
@@ -238,6 +238,19 @@ export default function CashierDashboard() {
 
       // Create workbook and worksheet
       const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Merge cells for title and summary headers so they don't get cut off
+      worksheet['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, // REKAPAN PENJUALAN HARIAN
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }, // Tanggal
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } }, // RINGKASAN
+        { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } }, // Total Pendapatan Harian
+        { s: { r: 5, c: 0 }, e: { r: 5, c: 1 } }, // Total Item
+        { s: { r: 6, c: 0 }, e: { r: 6, c: 1 } }, // Total Variasi
+        { s: { r: 7, c: 0 }, e: { r: 7, c: 1 } }, // Total Transaksi
+        { s: { r: 9, c: 0 }, e: { r: 9, c: 5 } }, // RINCIAN PENJUALAN PER MENU
+        { s: { r: sheetData.length - 1, c: 0 }, e: { r: sheetData.length - 1, c: 2 } }, // TOTAL KESELURUHAN
+      ];
 
       // Set column widths for better presentation
       worksheet['!cols'] = [
@@ -1119,14 +1132,14 @@ export default function CashierDashboard() {
                 const recap = calculateDailyRecap();
                 return (
                   <div className="glass-card mb-6 p-6" style={{ background: 'var(--card-bg, rgba(255,255,255,0.85))', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
-                    <div className="flex justify-between items-center mb-4 pb-3" style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <div className="flex items-center gap-3">
-                        <div style={{ background: 'var(--primary-color)', color: 'white', padding: '0.6rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="flex justify-between items-center mb-4 pb-3" style={{ borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '1rem' }}>
+                      <div className="flex items-center gap-3" style={{ minWidth: '280px' }}>
+                        <div style={{ background: 'var(--primary-color)', color: 'white', padding: '0.6rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <FileText size={22} />
                         </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Rekapan Penjualan Harian</h3>
-                          <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.7 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, lineHeight: '1.3', paddingBottom: '0.2rem' }}>Rekapan Penjualan Harian</h3>
+                          <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.7, lineHeight: '1.3' }}>
                             Tanggal: {archiveDate ? new Date(archiveDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
                           </p>
                         </div>
