@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, FileText
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, FileText, Download
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -186,6 +186,79 @@ export default function CashierDashboard() {
       totalCancelled: archiveTransactions.filter(trx => trx.status === 'cancelled').length,
       itemList,
     };
+  };
+
+  // Export Daily Recap to Excel (.xlsx)
+  const exportToExcel = async () => {
+    try {
+      const recap = calculateDailyRecap();
+      const XLSX = await import('xlsx');
+
+      const formattedDateStr = archiveDate 
+        ? new Date(archiveDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : archiveDate;
+
+      // Header rows
+      const sheetData = [
+        ['REKAPAN PENJUALAN HARIAN'],
+        [`Tanggal: ${formattedDateStr}`],
+        [],
+        ['RINGKASAN'],
+        ['Total Pendapatan Harian', `Rp ${recap.totalRevenue.toLocaleString('id-ID')}`],
+        ['Total Item / Makanan Terjual', `${recap.totalItemsSold} item`],
+        ['Total Variasi Menu Laku', `${recap.itemList.length} menu`],
+        ['Total Transaksi Selesai', `${recap.totalTransactions} transaksi`],
+        [],
+        ['RINCIAN PENJUALAN PER MENU'],
+        ['No', 'Nama Makanan / Item', 'Kategori', 'Total Terjual (Porsi)', 'Harga Satuan (Rp)', 'Total Pendapatan Menu (Rp)']
+      ];
+
+      // Item rows
+      recap.itemList.forEach((item, idx) => {
+        sheetData.push([
+          idx + 1,
+          item.name,
+          item.category || '-',
+          item.quantity,
+          item.unitPrice,
+          item.totalRevenue
+        ]);
+      });
+
+      // Footer total row
+      sheetData.push([]);
+      sheetData.push([
+        'TOTAL KESELURUHAN (1 HARI)',
+        '',
+        '',
+        recap.totalItemsSold,
+        '',
+        recap.totalRevenue
+      ]);
+
+      // Create workbook and worksheet
+      const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Set column widths for better presentation
+      worksheet['!cols'] = [
+        { wch: 6 },   // No
+        { wch: 30 },  // Nama Makanan
+        { wch: 15 },  // Kategori
+        { wch: 22 },  // Total Terjual
+        { wch: 20 },  // Harga Satuan
+        { wch: 28 },  // Total Pendapatan Menu
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekapan Penjualan');
+
+      // Write and trigger download
+      const filename = `Rekapan_Penjualan_${archiveDate || 'Harian'}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+    } catch (err) {
+      console.error('Failed to export excel:', err);
+      alert('Gagal mengunduh file Excel');
+    }
   };
 
   // Fetch menu items
@@ -1058,7 +1131,14 @@ export default function CashierDashboard() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <button 
+                          className="btn btn-outline flex items-center gap-2" 
+                          onClick={exportToExcel}
+                          style={{ background: '#10b981', color: 'white', borderColor: '#10b981', fontSize: '0.85rem', padding: '0.4rem 0.85rem', cursor: 'pointer' }}
+                        >
+                          <Download size={16} /> Download Excel
+                        </button>
                         <span className="badge badge-success" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
                           {recap.totalTransactions} Transaksi Selesai
                         </span>
