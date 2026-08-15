@@ -20,6 +20,7 @@ https://program-kasir-local-bice.vercel.app/
 ## Update
 8/15
 tambah fitur rekapan dan download Excel
+ubah sdiki dpe UI order for customer
 
 
 
