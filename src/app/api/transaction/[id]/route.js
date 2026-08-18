@@ -32,11 +32,14 @@ export async function PUT(request, { params }) {
   const { id } = await params;
   try {
     const body = await request.json();
-    const { status } = body;
+    const { status, tableNumber } = body;
     
     const transaction = await prisma.transaction.update({
       where: { id },
-      data: { status }
+      data: { 
+        ...(status && { status }),
+        ...(tableNumber !== undefined && { tableNumber })
+      }
     });
     
     return NextResponse.json(transaction);

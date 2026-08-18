@@ -195,7 +195,13 @@ export default function OrderPage({ params }) {
     (item.category && item.category.toLowerCase().includes(searchQuery.toLowerCase()))
   );
   
-  const categories = [...new Set(filteredMenu.map(item => item.category || 'Umum'))];
+  const categoryPriority = { 'Makanan': 1, 'Minuman': 2, 'Snack': 3, 'Cemilan': 3, 'Dessert': 4, 'Tambahan': 5 };
+  const categories = [...new Set(filteredMenu.map(item => item.category || 'Umum'))].sort((a, b) => {
+    const orderA = categoryPriority[a] || 99;
+    const orderB = categoryPriority[b] || 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.localeCompare(b);
+  });
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)' }}>

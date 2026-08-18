@@ -24,6 +24,8 @@ export default function CashierDashboard() {
   const [inputTableNumber, setInputTableNumber] = useState('');
   const [tableModalError, setTableModalError] = useState('');
   const [generatingQr, setGeneratingQr] = useState(false);
+  const [isTakeAway, setIsTakeAway] = useState(false);
+  const [transactionSearch, setTransactionSearch] = useState('');
 
   // Edit Order state
   const [showEditOrderModal, setShowEditOrderModal] = useState(false);
@@ -142,7 +144,7 @@ export default function CashierDashboard() {
 
   // Calculate Daily Recap for Archive Transactions
   const calculateDailyRecap = () => {
-    const validTrxs = archiveTransactions.filter(trx => trx.status !== 'cancelled');
+    const validTrxs = archiveTransactions.filter(trx => trx.status === 'completed');
     let totalRevenue = 0;
     let totalItemsSold = 0;
     const itemMap = {};
@@ -420,12 +422,13 @@ export default function CashierDashboard() {
   const openTableModal = () => {
     setInputTableNumber('');
     setTableModalError('');
+    setIsTakeAway(false);
     setShowTableModal(true);
   };
 
   const handleCreateTransactionWithTable = async (e) => {
     e.preventDefault();
-    if (!inputTableNumber.trim()) {
+    if (!isTakeAway && !inputTableNumber.trim()) {
       setTableModalError('Nomor meja wajib diisi.');
       return;
     }
@@ -433,17 +436,18 @@ export default function CashierDashboard() {
     setGeneratingQr(true);
     setTableModalError('');
     try {
+      const finalTableNumber = isTakeAway ? `Take Away - ${Math.floor(100 + Math.random() * 900)}` : inputTableNumber.trim();
       const res = await fetch('/api/transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableNumber: inputTableNumber.trim() })
+        body: JSON.stringify({ tableNumber: finalTableNumber })
       });
       const data = await res.json();
       if (res.ok) {
         const orderUrl = `${window.location.origin}/order/${data.id}`;
         setActiveQr({
           id: data.id,
-          tableNumber: data.tableNumber || inputTableNumber.trim(),
+          tableNumber: data.tableNumber || finalTableNumber,
           url: orderUrl
         });
         setShowTableModal(false);
@@ -469,6 +473,27 @@ export default function CashierDashboard() {
       if (activeTab === 'archive') fetchArchive();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleChangeTableNumber = async (id, currentNumber) => {
+    const newTable = prompt('Masukkan nomor meja / nama pelanggan baru:', currentNumber);
+    if (!newTable || newTable.trim() === '' || newTable === currentNumber) return;
+    
+    try {
+      const res = await fetch(`/api/transaction/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableNumber: newTable.trim() })
+      });
+      if (res.ok) {
+        if (activeTab === 'transactions') fetchTransactions();
+        if (activeTab === 'archive') fetchArchive();
+      } else {
+        alert('Gagal mengganti nomor meja.');
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan server.');
     }
   };
 
@@ -718,10 +743,16 @@ export default function CashierDashboard() {
     );
   }
 
+  const categoryPriority = { 'Makanan': 1, 'Minuman': 2, 'Snack': 3, 'Cemilan': 3, 'Dessert': 4, 'Tambahan': 5 };
   const filteredMenu = menuList.filter(item =>
     item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
     (item.category && item.category.toLowerCase().includes(menuSearch.toLowerCase()))
-  );
+  ).sort((a, b) => {
+    const orderA = categoryPriority[a.category || 'Umum'] || 99;
+    const orderB = categoryPriority[b.category || 'Umum'] || 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <div>
@@ -810,9 +841,20 @@ export default function CashierDashboard() {
       {/* TAB 1: TRANSAKSI & QR */}
       {activeTab === 'transactions' && (
         <div>
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
             <h2>Daftar Transaksi Realtime</h2>
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center flex-wrap">
+              <div style={{ position: 'relative', minWidth: '200px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Cari meja..."
+                  style={{ paddingLeft: '2rem', paddingRight: '1rem', paddingTop: '0.4rem', paddingBottom: '0.4rem', fontSize: '0.85rem' }}
+                  value={transactionSearch}
+                  onChange={(e) => setTransactionSearch(e.target.value)}
+                />
+              </div>
               <button className="btn btn-outline" onClick={fetchTransactions}>
                 <RefreshCcw size={18} style={{ marginRight: '8px' }} /> Refresh
               </button>
@@ -863,7 +905,16 @@ export default function CashierDashboard() {
             <p>Memuat data transaksi...</p>
           ) : (
             <div className="grid grid-cols-2">
-              {transactions.map(trx => (
+              {[...transactions]
+                .filter(trx => trx.tableNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) || trx.id.toLowerCase().includes(transactionSearch.toLowerCase()))
+                .sort((a, b) => {
+                  const statusOrder = { 'open': 1, 'ordered': 2, 'completed': 3, 'cancelled': 4 };
+                  if (statusOrder[a.status] !== statusOrder[b.status]) {
+                    return statusOrder[a.status] - statusOrder[b.status];
+                  }
+                  return new Date(b.createdAt) - new Date(a.createdAt);
+                })
+                .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -874,9 +925,19 @@ export default function CashierDashboard() {
                           padding: '0.25rem 0.65rem',
                           borderRadius: '8px',
                           fontWeight: 700,
-                          fontSize: '0.85rem'
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
                         }}>
                           MEJA {trx.tableNumber || '-'}
+                          <button 
+                            onClick={() => handleChangeTableNumber(trx.id, trx.tableNumber)}
+                            style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex' }}
+                            title="Ganti Nomor Meja"
+                          >
+                            <Edit3 size={12} />
+                          </button>
                         </span>
                         <h3 style={{ margin: 0, fontSize: '0.95rem' }}>ID: {trx.id.substring(0, 16)}...</h3>
                       </div>
@@ -1018,17 +1079,25 @@ export default function CashierDashboard() {
 
                 <form onSubmit={handleCreateTransactionWithTable} className="flex flex-col gap-4">
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-                      Nomor Meja Pelanggan *
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600 }}>
+                        Nomor Meja Pelanggan *
+                      </label>
+                      <label style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#047857', fontWeight: 700 }}>
+                        <input type="checkbox" checked={isTakeAway} onChange={(e) => setIsTakeAway(e.target.checked)} />
+                        Take Away (Bungkus)
+                      </label>
+                    </div>
                     <input
                       type="text"
                       className="input"
                       placeholder="Contoh: 05, 12, A1..."
                       value={inputTableNumber}
                       onChange={(e) => setInputTableNumber(e.target.value)}
+                      disabled={isTakeAway}
                       autoFocus
-                      required
+                      required={!isTakeAway}
+                      style={{ opacity: isTakeAway ? 0.5 : 1 }}
                     />
                     <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.4rem' }}>
                       Nomor meja ini akan digunakan sebagai ID unik transaksi dan dicetak pada QR Code.
