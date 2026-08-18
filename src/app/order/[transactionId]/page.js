@@ -544,7 +544,7 @@ export default function OrderPage({ params }) {
 
           {/* Submit Button */}
           <button
-            onClick={submitOrder}
+            onClick={() => setShowCartModal(true)}
             disabled={submitting}
             style={{
               background: '#ef4444',
@@ -558,7 +558,7 @@ export default function OrderPage({ params }) {
               boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)'
             }}
           >
-            {submitting ? 'Mengirim...' : 'Kirim Pesanan'}
+            {submitting ? 'Loading...' : 'Confirm Order'}
           </button>
         </div>
       )}
