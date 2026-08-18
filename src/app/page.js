@@ -919,36 +919,36 @@ export default function CashierDashboard() {
                 .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
                   <div>
-                    <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span style={{
-                          background: 'var(--primary-color)',
-                          color: 'white',
-                          padding: '0.25rem 0.65rem',
-                          borderRadius: '8px',
-                          fontWeight: 700,
-                          fontSize: '0.85rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          MEJA {trx.tableNumber || '-'}
-                          <button 
-                            onClick={() => handleChangeTableNumber(trx.id, trx.tableNumber)}
-                            style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex' }}
-                            title="Ganti Nomor Meja"
-                          >
-                            <Edit3 size={12} />
-                          </button>
-                        </span>
-                        <h3 style={{ margin: 0, fontSize: '0.95rem' }}>ID: {trx.id.substring(0, 16)}...</h3>
-                      </div>
-                      <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`}>
+                    <div className="flex justify-between items-start mb-2 gap-2">
+                      <span style={{
+                        background: 'var(--primary-color)',
+                        color: 'white',
+                        padding: '0.25rem 0.65rem',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {trx.tableNumber?.toLowerCase().includes('take away') ? trx.tableNumber : `MEJA ${trx.tableNumber || '-'}`}
+                        <button 
+                          onClick={() => handleChangeTableNumber(trx.id, trx.tableNumber)}
+                          style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex' }}
+                          title="Ganti Nomor Meja"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                      </span>
+                      <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`} style={{ textAlign: 'right' }}>
                         {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
                       </span>
                     </div>
-                    <p style={{ fontSize: '0.85rem' }}>Waktu: {new Date(trx.createdAt).toLocaleString('id-ID')}</p>
+                    <div style={{ marginBottom: '1rem' }}>
+                      <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', opacity: 0.8, wordBreak: 'break-all' }}>ID: {trx.id.substring(0, 20)}...</h3>
+                      <p style={{ fontSize: '0.85rem', margin: 0, opacity: 0.8 }}>Waktu: {new Date(trx.createdAt).toLocaleString('id-ID')}</p>
+                    </div>
 
                     {trx.orders && trx.orders.length > 0 ? (
                       <div className="mt-4">
