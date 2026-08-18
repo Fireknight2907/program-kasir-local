@@ -1,21 +1,13 @@
 https://program-kasir-local-bice.vercel.app/
 
-- transaksi yang terjadi perhari dan besoknya akan direset
-- buat rekapan setiap hari✅
 - gambar yang ditampilkan tidak akan stretch
 - saat print barcode menampilkan (barcode, tanggal, nomor meja) ✅ sisa tambah tanggal
-- ID diganti menjadi nomor ✅
 - UI diperbagus
-- tambah user Admin ✅
-- tambah fitur cancel order✅
-- fitur take away untuk Admin
-- tambah fitur admin dan kasir ✅ masih perlu di improve
-- tambah fitur edit pesanan ✅
-- fitur untuk seluruh order yang terjadi di meja yang sama masuk ke dalam orderan meja yang sama sebelum membayar
-- tambah fitur kategori menu
-- fitur untuk admin bisa tambah kategori menu✅
-- hapus fitur tambah menu untuk kasir✅
-- tambah fitur download excel untuk rekapan✅
+- no HP di karyawan hanya bisa memasukan nomor
+- edit urutan kategori menu
+- ngecek scroll menu apakah ada error
+
+
 
 ## Update
 8/15
