@@ -204,7 +204,7 @@ export default function CashierDashboard() {
         [`Tanggal: ${formattedDateStr}`],
         [],
         ['RINGKASAN'],
-        ['Total Pendapatan Harian', '', `Rp ${recap.totalRevenue.toLocaleString('id-ID')}`],
+        ['Total Pendapatan Harian', '', recap.totalRevenue],
         ['Total Item / Makanan Terjual', '', `${recap.totalItemsSold} item`],
         ['Total Variasi Menu Laku', '', `${recap.itemList.length} menu`],
         ['Total Transaksi Selesai', '', `${recap.totalTransactions} transaksi`],
@@ -238,6 +238,30 @@ export default function CashierDashboard() {
 
       // Create workbook and worksheet
       const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Format price cells with Rupiah symbol (Rp) and 0 decimal places (Accounting format: Rp left-aligned, numbers right-aligned)
+      const rupiahFormat = '_("Rp"* #,##0_);_("Rp"* (#,##0);_("Rp"* "-"_);_(@_)';
+
+      // 1. Format Ringkasan: Total Pendapatan Harian (Cell C5 -> row 4, col 2)
+      const summaryRevenueCell = XLSX.utils.encode_cell({ r: 4, c: 2 });
+      if (worksheet[summaryRevenueCell]) {
+        worksheet[summaryRevenueCell].z = rupiahFormat;
+      }
+
+      // 2. Format Rincian: Harga Satuan (Col E/4) and Total Pendapatan Menu (Col F/5)
+      recap.itemList.forEach((_, idx) => {
+        const r = 11 + idx;
+        const priceCell = XLSX.utils.encode_cell({ r, c: 4 });
+        const totalCell = XLSX.utils.encode_cell({ r, c: 5 });
+        if (worksheet[priceCell]) worksheet[priceCell].z = rupiahFormat;
+        if (worksheet[totalCell]) worksheet[totalCell].z = rupiahFormat;
+      });
+
+      // 3. Format Footer: Total Keseluruhan (Col F/5 -> row sheetData.length - 1, col 5)
+      const totalOverallCell = XLSX.utils.encode_cell({ r: sheetData.length - 1, c: 5 });
+      if (worksheet[totalOverallCell]) {
+        worksheet[totalOverallCell].z = rupiahFormat;
+      }
 
       // Merge cells for title and summary headers so they don't get cut off
       worksheet['!merges'] = [
