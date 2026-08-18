@@ -905,7 +905,7 @@ export default function CashierDashboard() {
           {loadingTransactions && transactions.length === 0 ? (
             <p>Memuat data transaksi...</p>
           ) : (
-            <div className="grid grid-cols-2">
+            <div className="grid grid-cols-2" style={{ alignItems: 'flex-start' }}>
               {[...transactions]
                 .filter(trx => trx.tableNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) || trx.id.toLowerCase().includes(transactionSearch.toLowerCase()))
                 .sort((a, b) => {
@@ -983,16 +983,17 @@ export default function CashierDashboard() {
                     )}
                   </div>
 
-                  {trx.status === 'ordered' && (
-                    <button
-                      className="btn btn-secondary mt-4"
-                      onClick={() => completeTransaction(trx.id)}
-                      style={{ width: '100%', marginBottom: '0.5rem' }}
-                    >
-                      <Check size={18} style={{ marginRight: '8px' }} /> Tandai Selesai (Sudah Dibayar)
-                    </button>
-                  )}
-                  <div className="grid grid-cols-2 gap-2 mt-auto">
+                  <div className="mt-auto pt-2">
+                    {trx.status === 'ordered' && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => completeTransaction(trx.id)}
+                        style={{ width: '100%', marginBottom: '0.75rem' }}
+                      >
+                        <Check size={18} style={{ marginRight: '8px' }} /> Tandai Selesai (Sudah Dibayar)
+                      </button>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
                     {trx.status !== 'completed' && trx.status !== 'cancelled' && (
                       <>
                         <button
@@ -1037,6 +1038,7 @@ export default function CashierDashboard() {
                       </button>
                     )}
                   </div>
+                </div>
                 </div>
               ))}
               {transactions.length === 0 && !loadingTransactions && (
