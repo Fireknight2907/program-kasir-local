@@ -34,6 +34,22 @@ export async function PUT(request, { params }) {
     const body = await request.json();
     const { status, tableNumber } = body;
     
+    if (tableNumber !== undefined && !tableNumber.toLowerCase().startsWith('take away')) {
+      const existingActive = await prisma.transaction.findFirst({
+        where: {
+          id: { not: id },
+          tableNumber: { equals: tableNumber, mode: 'insensitive' },
+          status: { in: ['open', 'ordered'] }
+        }
+      });
+      if (existingActive) {
+        return NextResponse.json(
+          { error: `Meja "${tableNumber}" sedang terisi dan belum selesai.` },
+          { status: 400 }
+        );
+      }
+    }
+
     const transaction = await prisma.transaction.update({
       where: { id },
       data: { 

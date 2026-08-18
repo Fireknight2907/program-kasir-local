@@ -5,6 +5,23 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const tableNumber = body.tableNumber ? String(body.tableNumber).trim() : '0';
+    
+    // Validasi meja dobel jika bukan Take Away
+    if (!tableNumber.toLowerCase().startsWith('take away')) {
+      const existingActive = await prisma.transaction.findFirst({
+        where: {
+          tableNumber: { equals: tableNumber, mode: 'insensitive' },
+          status: { in: ['open', 'ordered'] }
+        }
+      });
+      if (existingActive) {
+        return NextResponse.json(
+          { error: `Meja "${tableNumber}" sedang terisi dan belum selesai (Silakan selesaikan transaksi meja tersebut terlebih dahulu).` },
+          { status: 400 }
+        );
+      }
+    }
+
     const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
     const customId = `MEJA-${tableNumber}-${Date.now().toString(36).toUpperCase()}-${randomSuffix}`;
 

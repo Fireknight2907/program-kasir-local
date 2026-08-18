@@ -490,7 +490,8 @@ export default function CashierDashboard() {
         if (activeTab === 'transactions') fetchTransactions();
         if (activeTab === 'archive') fetchArchive();
       } else {
-        alert('Gagal mengganti nomor meja.');
+        const data = await res.json();
+        alert(data.error || 'Gagal mengganti nomor meja.');
       }
     } catch (err) {
       alert('Terjadi kesalahan server.');
@@ -912,7 +913,8 @@ export default function CashierDashboard() {
                   if (statusOrder[a.status] !== statusOrder[b.status]) {
                     return statusOrder[a.status] - statusOrder[b.status];
                   }
-                  return new Date(b.createdAt) - new Date(a.createdAt);
+                  // Sort by oldest first so whoever ordered first is at the top
+                  return new Date(a.createdAt) - new Date(b.createdAt);
                 })
                 .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between">
