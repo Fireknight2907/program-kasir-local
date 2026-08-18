@@ -917,7 +917,7 @@ export default function CashierDashboard() {
                   return new Date(a.createdAt) - new Date(b.createdAt);
                 })
                 .map(trx => (
-                <div key={trx.id} className="glass-card flex flex-col h-full">
+                <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
                   <div>
                     <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
@@ -977,7 +977,7 @@ export default function CashierDashboard() {
                     )}
                   </div>
 
-                  <div className="mt-auto pt-2">
+                  <div style={{ marginTop: 'auto', paddingTop: '0.5rem' }}>
                     {trx.orders && trx.orders.length > 0 && (
                       <div className="flex justify-between items-center mb-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
                         <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
