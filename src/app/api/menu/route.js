@@ -15,7 +15,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, price, category, image } = body;
+    const { name, price, category, image, isAvailable } = body;
 
     if (!name || !price) {
       return NextResponse.json({ error: 'Nama dan harga menu wajib diisi' }, { status: 400 });
@@ -27,6 +27,7 @@ export async function POST(request) {
         price: parseInt(price),
         category: category || 'Umum',
         image: image || null,
+        isAvailable: isAvailable !== undefined ? isAvailable : true,
       },
     });
 

@@ -17,6 +17,7 @@ model MenuItem {
   price      Int
   image      String?
   category   String?
+  isAvailable Boolean    @default(true)
   createdAt  DateTime    @default(now())
   orderItems OrderItem[]
 }

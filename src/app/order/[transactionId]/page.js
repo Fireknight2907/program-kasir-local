@@ -342,7 +342,8 @@ export default function OrderPage({ params }) {
                       gap: '0.75rem',
                       background: 'var(--card-bg, #ffffff)',
                       border: '1px solid var(--border-color)',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                      opacity: item.isAvailable === false ? 0.6 : 1
                     }}
                   >
                     {/* Menu Thumbnail */}
@@ -394,7 +395,11 @@ export default function OrderPage({ params }) {
 
                     {/* Stepper Button */}
                     <div style={{ paddingLeft: '0.25rem' }}>
-                      {cart[item.id] ? (
+                      {item.isAvailable === false ? (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '0.3rem 0.5rem', borderRadius: '8px', whiteSpace: 'nowrap' }}>
+                          Stok Habis
+                        </div>
+                      ) : cart[item.id] ? (
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',

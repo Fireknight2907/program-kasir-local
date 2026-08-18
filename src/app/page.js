@@ -639,6 +639,23 @@ export default function CashierDashboard() {
     setShowMenuModal(true);
   };
 
+  const handleToggleAvailability = async (item) => {
+    try {
+      const res = await fetch(`/api/menu/${item.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAvailable: !item.isAvailable }),
+      });
+      if (res.ok) {
+        fetchMenu();
+      } else {
+        alert('Gagal mengubah status ketersediaan menu.');
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan server.');
+    }
+  };
+
   const handleSaveMenu = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -1104,14 +1121,21 @@ export default function CashierDashboard() {
                       {menuList
                         .filter(m => m.name.toLowerCase().includes(editOrderSearch.toLowerCase()))
                         .map(menu => (
-                          <div key={menu.id} className="flex justify-between items-center p-2" style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <div key={menu.id} className="flex justify-between items-center p-2" style={{ borderBottom: '1px solid var(--border-color)', opacity: menu.isAvailable === false ? 0.6 : 1 }}>
                             <div>
-                              <p style={{ margin: 0, fontWeight: 600, fontSize: '0.85rem' }}>{menu.name}</p>
+                              <div className="flex items-center gap-2">
+                                <p style={{ margin: 0, fontWeight: 600, fontSize: '0.85rem' }}>{menu.name}</p>
+                                {menu.isAvailable === false && (
+                                  <span style={{ background: '#ef4444', color: 'white', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700 }}>Habis</span>
+                                )}
+                              </div>
                               <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.8 }}>Rp {menu.price.toLocaleString('id-ID')}</p>
                             </div>
-                            <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => addNewItemToEditing(menu)}>
-                              <Plus size={14} /> Tambah
-                            </button>
+                            {menu.isAvailable !== false && (
+                              <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => addNewItemToEditing(menu)}>
+                                <Plus size={14} /> Tambah
+                              </button>
+                            )}
                           </div>
                       ))}
                     </div>
@@ -1422,20 +1446,36 @@ export default function CashierDashboard() {
                   </div>
 
                   <div style={{ padding: '1.25rem' }}>
-                    <h3 style={{ fontSize: '1.15rem', marginBottom: '0.25rem' }}>{item.name}</h3>
-                    <p className="text-primary" style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: 0 }}>
+                    <div className="flex justify-between items-start">
+                      <h3 style={{ fontSize: '1.15rem', marginBottom: '0.25rem' }}>{item.name}</h3>
+                      {!item.isAvailable && (
+                        <span style={{ background: '#ef4444', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                          Habis
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-primary" style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: 0, opacity: item.isAvailable ? 1 : 0.5 }}>
                       Rp {item.price.toLocaleString('id-ID')}
                     </p>
                   </div>
 
-                  <div className="flex gap-2" style={{ padding: '0 1.25rem 1.25rem 1.25rem' }}>
+                  <div className="flex flex-col gap-2" style={{ padding: '0 1.25rem 1.25rem 1.25rem' }}>
                     {currentUser?.role === 'ADMIN' ? (
                       <>
-                        <button className="btn btn-outline" style={{ flex: 1, padding: '0.4rem' }} onClick={() => openEditModal(item)}>
-                          <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit
-                        </button>
-                        <button className="btn btn-danger" style={{ padding: '0.4rem 0.75rem' }} onClick={() => handleDeleteMenu(item.id, item.name)}>
-                          <Trash2 size={16} />
+                        <div className="flex gap-2">
+                          <button className="btn btn-outline" style={{ flex: 1, padding: '0.4rem' }} onClick={() => openEditModal(item)}>
+                            <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit
+                          </button>
+                          <button className="btn btn-danger" style={{ padding: '0.4rem 0.75rem' }} onClick={() => handleDeleteMenu(item.id, item.name)}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <button 
+                          className={`btn ${item.isAvailable ? 'btn-outline' : 'btn-primary'}`} 
+                          style={{ padding: '0.4rem', width: '100%', borderColor: item.isAvailable ? '#ef4444' : '', color: item.isAvailable ? '#ef4444' : '' }} 
+                          onClick={() => handleToggleAvailability(item)}
+                        >
+                          <X size={16} style={{ marginRight: '6px' }} /> {item.isAvailable ? 'Close Order (Stok Habis)' : 'Buka Order (Tersedia)'}
                         </button>
                       </>
                     ) : (
