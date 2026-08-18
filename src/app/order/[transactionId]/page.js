@@ -597,9 +597,21 @@ export default function OrderPage({ params }) {
               </div>
               <button 
                 onClick={() => setShowCartModal(false)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7 }}
+                style={{ 
+                  background: 'rgba(239, 68, 68, 0.1)', 
+                  color: '#ef4444', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  width: '32px', 
+                  height: '32px', 
+                  borderRadius: '50%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontWeight: 'bold'
+                }}
               >
-                <X size={22} />
+                <X size={20} />
               </button>
             </div>
 
