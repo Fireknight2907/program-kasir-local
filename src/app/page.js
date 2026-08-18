@@ -956,6 +956,7 @@ export default function CashierDashboard() {
                           {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
                             <div key={order.id} style={{ marginBottom: '0.5rem' }}>
                               {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
+                              {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
                               <ul style={{ paddingLeft: '1rem', margin: 0 }}>
                                 {order.items.map(item => (
                                   <li key={item.id} style={{ marginBottom: '0.25rem' }}>

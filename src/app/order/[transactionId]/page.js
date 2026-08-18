@@ -16,6 +16,7 @@ export default function OrderPage({ params }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('');
   const [showCartModal, setShowCartModal] = useState(false);
+  const [isTakeaway, setIsTakeaway] = useState(false);
 
   const categoryRefs = useRef({});
 
@@ -117,7 +118,7 @@ export default function OrderPage({ params }) {
       const res = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId, items })
+        body: JSON.stringify({ transactionId, items, isTakeaway })
       });
 
       if (res.ok) {
@@ -664,6 +665,17 @@ export default function OrderPage({ params }) {
             </div>
 
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.85rem' }}>
+              <div style={{ marginBottom: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.65rem', borderRadius: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-color)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={isTakeaway} 
+                    onChange={(e) => setIsTakeaway(e.target.checked)} 
+                    style={{ width: '18px', height: '18px', accentColor: '#ef4444' }} 
+                  />
+                  Pesanan ini ingin dibungkus (Take Away)
+                </label>
+              </div>
               <div className="flex justify-between items-center mb-3">
                 <span style={{ fontWeight: 700, fontSize: '1rem' }}>Total Pembayaran:</span>
                 <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#ef4444' }}>

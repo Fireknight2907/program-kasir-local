@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { transactionId, items } = body;
+    const { transactionId, items, isTakeaway } = body;
     
     // items should be [{ menuItemId, quantity, price }]
     
@@ -24,6 +24,7 @@ export async function POST(request) {
       data: {
         transactionId,
         total: orderTotal,
+        isTakeaway: isTakeaway || false,
         items: {
           create: orderItemsData
         }
