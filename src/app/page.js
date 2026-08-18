@@ -905,7 +905,7 @@ export default function CashierDashboard() {
           {loadingTransactions && transactions.length === 0 ? (
             <p>Memuat data transaksi...</p>
           ) : (
-            <div className="grid grid-cols-2" style={{ alignItems: 'flex-start' }}>
+            <div className="grid grid-cols-2">
               {[...transactions]
                 .filter(trx => trx.tableNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) || trx.id.toLowerCase().includes(transactionSearch.toLowerCase()))
                 .sort((a, b) => {
@@ -917,8 +917,8 @@ export default function CashierDashboard() {
                   return new Date(a.createdAt) - new Date(b.createdAt);
                 })
                 .map(trx => (
-                <div key={trx.id} className="glass-card flex flex-col justify-between">
-                  <div>
+                <div key={trx.id} className="glass-card flex flex-col h-full">
+                  <div className="flex-1 flex flex-col">
                     <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span style={{
@@ -951,9 +951,9 @@ export default function CashierDashboard() {
                     <p style={{ fontSize: '0.85rem' }}>Waktu: {new Date(trx.createdAt).toLocaleString('id-ID')}</p>
 
                     {trx.orders && trx.orders.length > 0 ? (
-                      <div className="mt-4">
+                      <div className="mt-4 flex flex-col flex-1">
                         <p style={{ fontWeight: 600 }}>Daftar Pesanan:</p>
-                        <div style={{ maxHeight: '250px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1, minHeight: '100px', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem' }}>
                           <ul style={{ paddingLeft: '1rem', marginTop: '0.5rem', marginBottom: '0' }}>
                             {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
                               <div key={order.id} style={{ marginBottom: '0.5rem' }}>
@@ -971,7 +971,7 @@ export default function CashierDashboard() {
                             ))}
                           </ul>
                         </div>
-                        <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
+                        <div className="flex justify-between items-center mt-auto pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
                           <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
                           <span className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>
                             Rp {trx.total.toLocaleString('id-ID')}
@@ -979,7 +979,9 @@ export default function CashierDashboard() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-4" style={{ fontStyle: 'italic', opacity: 0.7 }}>Belum ada pesanan.</p>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <p className="mt-4" style={{ fontStyle: 'italic', opacity: 0.7 }}>Belum ada pesanan.</p>
+                      </div>
                     )}
                   </div>
 
