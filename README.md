@@ -4,7 +4,11 @@ https://program-kasir-local-bice.vercel.app/
 - saat print barcode menampilkan (barcode, tanggal, nomor meja) ✅ sisa tambah tanggal
 - UI diperbagus
 - no HP di karyawan hanya bisa memasukan nomor
-- edit urutan kategori menu
+- tambah fitur edit urutan dan hapus kategori menu
+- buat fitur take away bisa langsung di pesan dan tidak usah membuat QR lagi untuk karyawan
+- buat tampilan daftar transaksi sama semua dan hanya ketika ordernnya banyak yang bisa di scroll
+- tampilan customer menampilkan apa dan berapa banyak menu yang sudah di pesan
+- buat urutan dari pesanan paling terakhir sampai terbaru dari atas ke bawah
 - ngecek scroll menu apakah ada error
 
 
