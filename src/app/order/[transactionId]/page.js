@@ -18,14 +18,17 @@ export default function OrderPage({ params }) {
   const [showCartModal, setShowCartModal] = useState(false);
   const [isTakeaway, setIsTakeaway] = useState(false);
 
+  const [categoriesList, setCategoriesList] = useState([]);
+
   const categoryRefs = useRef({});
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [menuRes, trxRes] = await Promise.all([
+        const [menuRes, trxRes, catRes] = await Promise.all([
           fetch('/api/menu'),
-          fetch(`/api/transaction/${transactionId}`)
+          fetch(`/api/transaction/${transactionId}`),
+          fetch('/api/categories')
         ]);
 
         if (!trxRes.ok) {
@@ -49,9 +52,24 @@ export default function OrderPage({ params }) {
         const menuData = await menuRes.json();
         setMenu(menuData);
 
+        let catData = [];
+        if (catRes && catRes.ok) {
+          catData = await catRes.json();
+          setCategoriesList(catData);
+        }
+
         // Set initial active category
         if (menuData.length > 0) {
-          const cats = [...new Set(menuData.map(item => item.category || 'Umum'))];
+          const catMap = {};
+          if (Array.isArray(catData)) {
+            catData.forEach((c, i) => { catMap[c.name] = c.order !== undefined ? c.order : i; });
+          }
+          const cats = [...new Set(menuData.map(item => item.category || 'Umum'))].sort((a, b) => {
+            const orderA = catMap[a] !== undefined ? catMap[a] : 999;
+            const orderB = catMap[b] !== undefined ? catMap[b] : 999;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.localeCompare(b);
+          });
           if (cats.length > 0) setActiveCategory(cats[0]);
         }
 
@@ -196,10 +214,16 @@ export default function OrderPage({ params }) {
     (item.category && item.category.toLowerCase().includes(searchQuery.toLowerCase()))
   );
   
-  const categoryPriority = { 'Makanan': 1, 'Minuman': 2, 'Snack': 3, 'Cemilan': 3, 'Dessert': 4, 'Tambahan': 5 };
+  const categoryOrderMap = {};
+  if (Array.isArray(categoriesList) && categoriesList.length > 0) {
+    categoriesList.forEach((c, i) => {
+      categoryOrderMap[c.name] = c.order !== undefined ? c.order : i;
+    });
+  }
+
   const categories = [...new Set(filteredMenu.map(item => item.category || 'Umum'))].sort((a, b) => {
-    const orderA = categoryPriority[a] || 99;
-    const orderB = categoryPriority[b] || 99;
+    const orderA = categoryOrderMap[a] !== undefined ? categoryOrderMap[a] : 999;
+    const orderB = categoryOrderMap[b] !== undefined ? categoryOrderMap[b] : 999;
     if (orderA !== orderB) return orderA - orderB;
     return a.localeCompare(b);
   });

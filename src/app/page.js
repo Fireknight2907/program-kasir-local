@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, FileText, Download
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -56,6 +56,12 @@ export default function CashierDashboard() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
+
+  // Category management state
+  const [categoriesList, setCategoriesList] = useState([]);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryModalError, setCategoryModalError] = useState('');
 
   // Employee Management State (Admin only)
   const [employees, setEmployees] = useState([]);
@@ -315,10 +321,88 @@ export default function CashierDashboard() {
     setLoadingMenu(false);
   };
 
+  // Fetch categories
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setCategoriesList(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddCategory = async (e) => {
+    if (e) e.preventDefault();
+    if (!newCategoryName || !newCategoryName.trim()) return;
+    setCategoryModalError('');
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCategoryName.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCategoryModalError(data.error || 'Gagal menambahkan kategori');
+        return;
+      }
+      setNewCategoryName('');
+      fetchCategories();
+    } catch (err) {
+      setCategoryModalError('Terjadi kesalahan saat menambah kategori');
+    }
+  };
+
+  const handleMoveCategory = async (index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= categoriesList.length) return;
+
+    const updated = [...categoriesList];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+
+    const payload = updated.map((cat, idx) => ({ id: cat.id, order: idx + 1 }));
+    setCategoriesList(updated);
+
+    try {
+      await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: payload })
+      });
+      fetchCategories();
+    } catch (err) {
+      console.error('Failed to update category order:', err);
+    }
+  };
+
+  const handleDeleteCategory = async (category) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus kategori "${category.name}"?\nSemua menu di kategori ini akan dipindahkan ke kategori "Umum".`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/categories?id=${category.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Gagal menghapus kategori');
+        return;
+      }
+      fetchCategories();
+      fetchMenu();
+    } catch (err) {
+      alert('Terjadi kesalahan saat menghapus kategori');
+    }
+  };
+
   useEffect(() => {
     if (!checkingAuth && currentUser) {
       fetchTransactions();
       fetchMenu();
+      fetchCategories();
       const interval = setInterval(() => {
         if (activeTab === 'transactions') fetchTransactions();
       }, 5000);
@@ -744,13 +828,19 @@ export default function CashierDashboard() {
     );
   }
 
-  const categoryPriority = { 'Makanan': 1, 'Minuman': 2, 'Snack': 3, 'Cemilan': 3, 'Dessert': 4, 'Tambahan': 5 };
+  const categoryOrderMap = {};
+  if (Array.isArray(categoriesList) && categoriesList.length > 0) {
+    categoriesList.forEach((c, i) => {
+      categoryOrderMap[c.name] = c.order !== undefined ? c.order : i;
+    });
+  }
+
   const filteredMenu = menuList.filter(item =>
     item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
     (item.category && item.category.toLowerCase().includes(menuSearch.toLowerCase()))
   ).sort((a, b) => {
-    const orderA = categoryPriority[a.category || 'Umum'] || 99;
-    const orderB = categoryPriority[b.category || 'Umum'] || 99;
+    const orderA = categoryOrderMap[a.category || 'Umum'] !== undefined ? categoryOrderMap[a.category || 'Umum'] : 999;
+    const orderB = categoryOrderMap[b.category || 'Umum'] !== undefined ? categoryOrderMap[b.category || 'Umum'] : 999;
     if (orderA !== orderB) return orderA - orderB;
     return a.name.localeCompare(b.name);
   });
@@ -1485,14 +1575,8 @@ export default function CashierDashboard() {
               </div>
               {currentUser?.role === 'ADMIN' && (
                 <div className="flex gap-2">
-                  <button className="btn btn-outline" onClick={() => {
-                    const newCat = window.prompt('Masukkan nama kategori baru:');
-                    if (newCat && newCat.trim()) {
-                      setCustomCategories(prev => [...prev, newCat.trim()]);
-                      alert(`Kategori "${newCat.trim()}" berhasil ditambahkan. Silakan gunakan saat menambah menu.`);
-                    }
-                  }}>
-                    <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Kategori
+                  <button className="btn btn-outline" onClick={() => setShowCategoryModal(true)}>
+                    <Sliders size={18} style={{ marginRight: '8px' }} /> Kelola Kategori Menu
                   </button>
                   <button className="btn btn-primary" onClick={openAddModal}>
                     <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Menu Baru
@@ -1657,16 +1741,9 @@ export default function CashierDashboard() {
                         <button 
                           type="button" 
                           style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                          onClick={() => {
-                            const newCat = window.prompt('Masukkan nama kategori baru:');
-                            if (newCat && newCat.trim()) {
-                              const catName = newCat.trim();
-                              setCustomCategories(prev => [...prev, catName]);
-                              setFormData(prev => ({ ...prev, category: catName }));
-                            }
-                          }}
+                          onClick={() => setShowCategoryModal(true)}
                         >
-                          + Tambah Kategori
+                          + Kelola / Tambah Kategori
                         </button>
                       </div>
                       <select
@@ -1676,9 +1753,9 @@ export default function CashierDashboard() {
                         required
                       >
                         {[...new Set([
-                          'Makanan', 'Minuman', 'Dessert', 'Cemilan', 'Tambahan',
+                          ...categoriesList.map(c => c.name),
                           ...menuList.map(m => m.category).filter(Boolean),
-                          ...customCategories
+                          'Makanan', 'Minuman', 'Dessert', 'Cemilan', 'Tambahan', 'Umum'
                         ])].map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
@@ -1895,6 +1972,126 @@ export default function CashierDashboard() {
               </div>
               <button type="submit" className="btn btn-primary mt-2">Simpan Password Baru</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Kelola Kategori Menu */}
+      {showCategoryModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '550px', background: 'var(--bg-color)', position: 'relative' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Sliders size={20} /> Kelola Urutan & Kategori Menu
+              </h3>
+              <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowCategoryModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '1rem' }}>
+              Urutan kategori di bawah menentukan posisi tampilan menu pada halaman customer. Gunakan tombol (▲ / ▼) untuk menggeser posisi kategori.
+            </p>
+
+            {categoryModalError && (
+              <div style={{
+                padding: '0.6rem',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid #ef4444',
+                color: '#ef4444',
+                fontSize: '0.85rem',
+                marginBottom: '1rem'
+              }}>
+                {categoryModalError}
+              </div>
+            )}
+
+            {/* Form Tambah Kategori Baru */}
+            <form onSubmit={handleAddCategory} className="flex gap-2 mb-4">
+              <input
+                type="text"
+                className="input"
+                placeholder="Nama kategori baru (misal: Minuman, Dessert)..."
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+                <Plus size={16} style={{ marginRight: '4px' }} /> Tambah
+              </button>
+            </form>
+
+            {/* List Categories with reorder & delete */}
+            <div className="custom-scrollbar" style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem', background: 'rgba(0,0,0,0.02)' }}>
+              {categoriesList.length === 0 ? (
+                <p style={{ fontStyle: 'italic', textAlign: 'center', opacity: 0.7, padding: '1rem' }}>Belum ada kategori.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {categoriesList.map((cat, idx) => (
+                    <div key={cat.id || cat.name} className="flex justify-between items-center p-2" style={{ background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem', minWidth: '24px', color: 'var(--primary-color)' }}>#{idx + 1}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{cat.name}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem' }}
+                          disabled={idx === 0}
+                          onClick={() => handleMoveCategory(idx, 'up')}
+                          title="Geser ke Atas"
+                        >
+                          <ChevronUp size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem' }}
+                          disabled={idx === categoriesList.length - 1}
+                          onClick={() => handleMoveCategory(idx, 'down')}
+                          title="Geser ke Bawah"
+                        >
+                          <ChevronDown size={16} />
+                        </button>
+                        {currentUser?.role === 'ADMIN' && (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            style={{ padding: '0.2rem 0.5rem', marginLeft: '6px' }}
+                            onClick={() => handleDeleteCategory(cat)}
+                            title="Hapus Kategori"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button className="btn btn-primary" onClick={() => setShowCategoryModal(false)}>
+                Selesai
+              </button>
+            </div>
           </div>
         </div>
       )}
