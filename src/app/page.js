@@ -952,16 +952,16 @@ export default function CashierDashboard() {
 
                     {trx.orders && trx.orders.length > 0 ? (
                       <div className="mt-4">
-                        <p style={{ fontWeight: 600 }}>Daftar Pesanan:</p>
-                        <div style={{ maxHeight: '250px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem' }}>
-                          <ul style={{ paddingLeft: '1rem', marginTop: '0.5rem', marginBottom: '0' }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                        <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
+                          <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
                             {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
                               <div key={order.id} style={{ marginBottom: '0.5rem' }}>
                                 {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
                                 {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
                                 <ul style={{ paddingLeft: '1rem', margin: 0 }}>
                                   {order.items.map(item => (
-                                    <li key={item.id} style={{ marginBottom: '0.25rem' }}>
+                                    <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
                                       {item.quantity}x {item.menuItem?.name || 'Item'}
                                       <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
                                     </li>
@@ -973,7 +973,12 @@ export default function CashierDashboard() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-4" style={{ fontStyle: 'italic', opacity: 0.7 }}>Belum ada pesanan.</p>
+                      <div className="mt-4">
+                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                        <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(0,0,0,0.02)' }}>
+                          <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Belum ada pesanan.</p>
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -1399,21 +1404,24 @@ export default function CashierDashboard() {
 
                     {trx.orders && trx.orders.length > 0 ? (
                       <div className="mt-4">
-                        <ul style={{ paddingLeft: '1rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
-                          {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
-                            <div key={order.id} style={{ marginBottom: '0.5rem' }}>
-                              {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
-                              <ul style={{ paddingLeft: '1rem', margin: 0 }}>
-                                {order.items.map(item => (
-                                  <li key={item.id} style={{ marginBottom: '0.25rem' }}>
-                                    {item.quantity}x {item.menuItem?.name || 'Item'}
-                                    <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </ul>
+                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                        <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
+                          <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
+                            {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
+                              <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                                {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
+                                <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                  {order.items.map(item => (
+                                    <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                      {item.quantity}x {item.menuItem?.name || 'Item'}
+                                      <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </ul>
+                        </div>
                         <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
                           <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
                           <span className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>
@@ -1422,8 +1430,13 @@ export default function CashierDashboard() {
                         </div>
                       </div>
                     ) : (
-                        <p className="mt-4" style={{ fontStyle: 'italic', opacity: 0.7 }}>Belum ada pesanan.</p>
-                      )}
+                      <div className="mt-4">
+                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                        <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(0,0,0,0.02)' }}>
+                          <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Belum ada pesanan.</p>
+                        </div>
+                      </div>
+                    )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mt-auto pt-4">
