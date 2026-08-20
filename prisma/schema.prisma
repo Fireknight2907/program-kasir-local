@@ -6,9 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model MenuItem {
@@ -53,7 +52,7 @@ model OrderItem {
 
 model User {
   id         Int      @id @default(autoincrement())
-  employeeId String   @unique @default(cuid())
+  employeeId String?  @unique @default(cuid())
   username   String   @unique
   password   String
   name       String?
