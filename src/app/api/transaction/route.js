@@ -8,12 +8,14 @@ export async function POST(request) {
     
     // Validasi meja dobel jika bukan Take Away
     if (!tableNumber.toLowerCase().startsWith('take away')) {
-      const existingActive = await prisma.transaction.findFirst({
+      const activeTrxs = await prisma.transaction.findMany({
         where: {
-          tableNumber: { equals: tableNumber, mode: 'insensitive' },
           status: { in: ['open', 'ordered'] }
         }
       });
+      const existingActive = activeTrxs.find(
+        trx => trx.tableNumber && trx.tableNumber.toLowerCase() === tableNumber.toLowerCase()
+      );
       if (existingActive) {
         return NextResponse.json(
           { error: `Meja "${tableNumber}" sedang terisi dan belum selesai (Silakan selesaikan transaksi meja tersebut terlebih dahulu).` },
