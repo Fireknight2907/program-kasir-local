@@ -980,64 +980,64 @@ export default function CashierDashboard() {
           {activeQr && (() => {
             const dt = formatDateTimeIndonesian(activeQr.createdAt);
             return (
-              <div className="glass-card print-qr-card mb-4 flex flex-col items-center text-center p-6" style={{ border: '2px solid var(--primary-color)' }}>
+              <div className="glass-card print-qr-card mb-4 flex flex-col items-center text-center p-5" style={{ border: '2px solid var(--primary-color)' }}>
                 <div style={{
                   background: 'var(--primary-color)',
                   color: 'white',
-                  padding: '0.4rem 1.4rem',
+                  padding: '0.35rem 1.2rem',
                   borderRadius: '20px',
                   fontWeight: 800,
-                  fontSize: '1.25rem',
-                  marginBottom: '0.75rem',
+                  fontSize: '1.15rem',
+                  marginBottom: '0.5rem',
                   display: 'inline-block'
                 }}>
                   {activeQr.tableNumber?.toLowerCase().includes('take away') ? activeQr.tableNumber : `MEJA ${activeQr.tableNumber}`}
                 </div>
-                <h2 style={{ fontSize: '1.4rem', margin: 0, fontWeight: 700 }}>
+                <h2 style={{ fontSize: '1.3rem', margin: 0, fontWeight: 700 }}>
                   QR Code Pesanan {activeQr.tableNumber?.toLowerCase().includes('take away') ? activeQr.tableNumber : `Meja ${activeQr.tableNumber}`}
                 </h2>
-                <p style={{ margin: '0.4rem 0 0.8rem 0', fontSize: '0.9rem', opacity: 0.85 }}>
+                <p style={{ margin: '0.3rem 0 0.6rem 0', fontSize: '0.85rem', opacity: 0.85 }}>
                   Scan QR Code di bawah untuk melihat menu & melakukan pemesanan makanan/minuman.
                 </p>
                 
-                <div className="qr-container my-2 p-3" style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'inline-block' }}>
-                  <QRCodeSVG value={activeQr.url} size={220} />
+                <div className="qr-container my-1 p-2.5" style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'inline-block' }}>
+                  <QRCodeSVG value={activeQr.url} size={190} />
                 </div>
                 
                 {/* Information Badge for Hari, Tanggal, Jam saat QR dibuat */}
-                <div className="qr-time-info mt-3 mb-2 p-3" style={{
+                <div className="qr-time-info mt-2 mb-2 p-2.5" style={{
                   background: 'rgba(99, 102, 241, 0.08)',
                   borderRadius: '12px',
                   border: '1px solid rgba(99, 102, 241, 0.2)',
                   width: '100%',
-                  maxWidth: '420px',
+                  maxWidth: '400px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '4px'
                 }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Waktu QR Code Dibuat
                   </div>
-                  <div className="flex justify-center items-center gap-4 flex-wrap" style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                  <div className="flex justify-center items-center gap-4 flex-wrap" style={{ fontSize: '0.88rem', fontWeight: 600 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <Calendar size={16} style={{ color: 'var(--primary-color)' }} />
+                      <Calendar size={15} style={{ color: 'var(--primary-color)' }} />
                       {dt.day}, {dt.date}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <Clock size={16} style={{ color: 'var(--primary-color)' }} />
+                      <Clock size={15} style={{ color: 'var(--primary-color)' }} />
                       {dt.time}
                     </span>
                   </div>
                 </div>
 
-                <p style={{ fontSize: '0.82rem', wordBreak: 'break-all', opacity: 0.8, maxWidth: '450px', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+                <p style={{ fontSize: '0.8rem', wordBreak: 'break-all', opacity: 0.8, maxWidth: '420px', marginTop: '0.4rem', marginBottom: '0.2rem' }}>
                   Kode Transaksi: <code style={{ background: 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '4px' }}>{activeQr.id}</code>
                 </p>
-                <p className="no-print" style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>
+                <p className="no-print" style={{ fontSize: '0.78rem', opacity: 0.7, margin: 0 }}>
                   URL: <a href={activeQr.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)' }}>{activeQr.url}</a>
                 </p>
 
-                <div className="flex gap-4 mt-4 no-print">
+                <div className="flex gap-4 mt-3 no-print">
                   <button className="btn btn-outline" onClick={() => setActiveQr(null)}>Tutup</button>
                   <button className="btn btn-secondary" onClick={printQR}>
                     <Printer size={18} style={{ marginRight: '8px' }} /> Cetak QR Code Meja
