@@ -1005,8 +1005,10 @@ export default function CashierDashboard() {
                   if (aKelar !== bKelar) {
                     return aKelar - bKelar;
                   }
-                  // Sort by newest created first (descending)
-                  return new Date(b.createdAt) - new Date(a.createdAt);
+                  // Sort by newest created first (descending: newest -> oldest)
+                  const timeA = new Date(a.createdAt).getTime() || 0;
+                  const timeB = new Date(b.createdAt).getTime() || 0;
+                  return timeB - timeA;
                 })
                 .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
@@ -1479,7 +1481,9 @@ export default function CashierDashboard() {
                     if (aKelar !== bKelar) {
                       return aKelar - bKelar;
                     }
-                    return new Date(b.createdAt) - new Date(a.createdAt);
+                    const timeA = new Date(a.createdAt).getTime() || 0;
+                    const timeB = new Date(b.createdAt).getTime() || 0;
+                    return timeB - timeA;
                   })
                   .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between" style={{ opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
