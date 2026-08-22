@@ -5,10 +5,10 @@ https://program-kasir-local-bice.vercel.app/
 - UI diperbagus
 - no HP di karyawan hanya bisa memasukan nomor
 - tambah fitur edit urutan dan hapus kategori menu✅
-- buat fitur take away bisa langsung di pesan dan tidak usah membuat QR lagi untuk karyawan
+- buat fitur take away bisa langsung di pesan dan tidak usah membuat QR lagi untuk karyawan dan admin
 - buat tampilan daftar transaksi sama semua dan hanya ketika ordernnya banyak yang bisa di scroll✅
 - tampilan customer menampilkan apa dan berapa banyak menu yang sudah di pesan
-- buat urutan dari pesanan paling terakhir sampai terbaru dari atas ke bawah
+- buat urutan dari pesanan paling terakhir sampai terbaru dari atas ke bawah✅
 - ngecek scroll menu apakah ada error
 
 
@@ -20,7 +20,11 @@ ubah sdiki dpe UI order for customer
 
 8/20
 ubah tampilan daftar transaksi
-tambah fitur edit urutan dan hapus dari kategori makanan  
+tambah fitur edit urutan dan hapus dari kategori makanan 
+
+8/22
+tambah fitur urutan orderan dari yang paling baru sampai terakhir
+
 
 
 
