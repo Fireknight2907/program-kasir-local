@@ -999,12 +999,14 @@ export default function CashierDashboard() {
               {[...transactions]
                 .filter(trx => trx.tableNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) || trx.id.toLowerCase().includes(transactionSearch.toLowerCase()))
                 .sort((a, b) => {
-                  const statusOrder = { 'open': 1, 'ordered': 2, 'completed': 3, 'cancelled': 4 };
-                  if (statusOrder[a.status] !== statusOrder[b.status]) {
-                    return statusOrder[a.status] - statusOrder[b.status];
+                  const isKelar = (status) => status === 'completed' || status === 'cancelled';
+                  const aKelar = isKelar(a.status) ? 1 : 0;
+                  const bKelar = isKelar(b.status) ? 1 : 0;
+                  if (aKelar !== bKelar) {
+                    return aKelar - bKelar;
                   }
-                  // Sort by oldest first so whoever ordered first is at the top
-                  return new Date(a.createdAt) - new Date(b.createdAt);
+                  // Sort by newest created first (descending)
+                  return new Date(b.createdAt) - new Date(a.createdAt);
                 })
                 .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
@@ -1469,7 +1471,17 @@ export default function CashierDashboard() {
 
               <h3 className="mb-4 mt-6" style={{ fontSize: '1.1rem', fontWeight: 700 }}>Daftar Transaksi Individual ({archiveTransactions.length})</h3>
               <div className="grid grid-cols-2">
-                {archiveTransactions.map(trx => (
+                {[...archiveTransactions]
+                  .sort((a, b) => {
+                    const isKelar = (status) => status === 'completed' || status === 'cancelled';
+                    const aKelar = isKelar(a.status) ? 1 : 0;
+                    const bKelar = isKelar(b.status) ? 1 : 0;
+                    if (aKelar !== bKelar) {
+                      return aKelar - bKelar;
+                    }
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                  })
+                  .map(trx => (
                 <div key={trx.id} className="glass-card flex flex-col justify-between" style={{ opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
                   <div>
                     <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
