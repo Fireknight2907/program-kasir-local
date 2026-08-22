@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -62,6 +62,9 @@ export default function CashierDashboard() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryModalError, setCategoryModalError] = useState('');
+  const [draggedCategoryIdx, setDraggedCategoryIdx] = useState(null);
+  const [touchDraggingIdx, setTouchDraggingIdx] = useState(null);
+  const categoryListRef = useRef(null);
 
   // Employee Management State (Admin only)
   const [employees, setEmployees] = useState([]);
@@ -388,6 +391,85 @@ export default function CashierDashboard() {
     const payload = updated.map((cat, idx) => ({ id: cat.id, order: idx + 1 }));
     setCategoriesList(updated);
 
+    try {
+      await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: payload })
+      });
+      fetchCategories();
+    } catch (err) {
+      console.error('Failed to update category order:', err);
+    }
+  };
+
+  const handleCategoryDragStart = (e, index) => {
+    setDraggedCategoryIdx(index);
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+    }
+  };
+
+  const handleCategoryDragOver = (e, index) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    if (draggedCategoryIdx === null || draggedCategoryIdx === index) return;
+
+    const updated = [...categoriesList];
+    const draggedItem = updated.splice(draggedCategoryIdx, 1)[0];
+    updated.splice(index, 0, draggedItem);
+
+    setDraggedCategoryIdx(index);
+    setCategoriesList(updated);
+  };
+
+  const handleCategoryDragEnd = async () => {
+    setDraggedCategoryIdx(null);
+    if (categoriesList.length === 0) return;
+
+    const payload = categoriesList.map((cat, idx) => ({ id: cat.id, order: idx + 1 }));
+    try {
+      await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: payload })
+      });
+      fetchCategories();
+    } catch (err) {
+      console.error('Failed to update category order:', err);
+    }
+  };
+
+  const handleTouchStart = (e, index) => {
+    setTouchDraggingIdx(index);
+  };
+
+  const handleTouchMove = (e) => {
+    if (touchDraggingIdx === null || !categoryListRef.current) return;
+    const touch = e.touches[0];
+    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!targetEl) return;
+
+    const categoryItemEl = targetEl.closest('[data-category-index]');
+    if (categoryItemEl) {
+      const targetIdx = parseInt(categoryItemEl.getAttribute('data-category-index'), 10);
+      if (!isNaN(targetIdx) && targetIdx !== touchDraggingIdx) {
+        const updated = [...categoriesList];
+        const item = updated.splice(touchDraggingIdx, 1)[0];
+        updated.splice(targetIdx, 0, item);
+        setTouchDraggingIdx(targetIdx);
+        setCategoriesList(updated);
+      }
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (touchDraggingIdx === null) return;
+    setTouchDraggingIdx(null);
+
+    const payload = categoriesList.map((cat, idx) => ({ id: cat.id, order: idx + 1 }));
     try {
       await fetch('/api/categories', {
         method: 'PUT',
@@ -2073,9 +2155,22 @@ export default function CashierDashboard() {
               </button>
             </div>
 
-            <p style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '1rem' }}>
-              Urutan kategori di bawah menentukan posisi tampilan menu pada halaman customer. Gunakan tombol (▲ / ▼) untuk menggeser posisi kategori.
-            </p>
+            <div style={{
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px dashed var(--primary-color)',
+              borderRadius: '10px',
+              padding: '0.65rem 0.85rem',
+              fontSize: '0.85rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <GripVertical size={20} style={{ color: 'var(--primary-color)', flexShrink: 0 }} />
+              <span>
+                <strong>Geser / Drag & Drop</strong> baris kategori ke atas atau ke bawah untuk mengubah urutannya dengan mudah.
+              </span>
+            </div>
 
             {categoryModalError && (
               <div style={{
@@ -2106,54 +2201,80 @@ export default function CashierDashboard() {
               </button>
             </form>
 
-            {/* List Categories with reorder & delete */}
-            <div className="custom-scrollbar" style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem', background: 'rgba(0,0,0,0.02)' }}>
+            {/* List Categories with Drag & Drop */}
+            <div 
+              ref={categoryListRef}
+              className="custom-scrollbar" 
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              style={{ 
+                maxHeight: '380px', 
+                overflowY: 'auto', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '10px', 
+                padding: '0.5rem', 
+                background: 'rgba(0,0,0,0.02)',
+                userSelect: 'none'
+              }}
+            >
               {categoriesList.length === 0 ? (
                 <p style={{ fontStyle: 'italic', textAlign: 'center', opacity: 0.7, padding: '1rem' }}>Belum ada kategori.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {categoriesList.map((cat, idx) => (
-                    <div key={cat.id || cat.name} className="flex justify-between items-center p-2" style={{ background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <div className="flex items-center gap-2">
-                        <span style={{ fontWeight: 700, fontSize: '0.85rem', minWidth: '24px', color: 'var(--primary-color)' }}>#{idx + 1}</span>
-                        <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{cat.name}</span>
+                  {categoriesList.map((cat, idx) => {
+                    const isBeingDragged = draggedCategoryIdx === idx || touchDraggingIdx === idx;
+                    return (
+                      <div
+                        key={cat.id || cat.name || idx}
+                        data-category-index={idx}
+                        draggable
+                        onDragStart={(e) => handleCategoryDragStart(e, idx)}
+                        onDragOver={(e) => handleCategoryDragOver(e, idx)}
+                        onDragEnd={handleCategoryDragEnd}
+                        onTouchStart={(e) => handleTouchStart(e, idx)}
+                        className="flex justify-between items-center p-2.5"
+                        style={{
+                          background: isBeingDragged ? 'rgba(99, 102, 241, 0.15)' : 'var(--card-bg)',
+                          borderRadius: '10px',
+                          border: isBeingDragged ? '2px dashed var(--primary-color)' : '1px solid var(--border-color)',
+                          cursor: 'grab',
+                          transition: 'background 0.15s ease, border 0.15s ease',
+                          transform: isBeingDragged ? 'scale(1.01)' : 'scale(1)',
+                          boxShadow: isBeingDragged ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div style={{ cursor: 'grab', color: 'var(--primary-color)', opacity: 0.8, display: 'flex', alignItems: 'center' }}>
+                            <GripVertical size={20} />
+                          </div>
+                          <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--primary-color)', minWidth: '22px' }}>
+                            #{idx + 1}
+                          </span>
+                          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{cat.name}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span style={{ fontSize: '0.75rem', opacity: 0.6, fontStyle: 'italic', paddingRight: '0.5rem' }}>
+                            Geser ↕
+                          </span>
+                          {currentUser?.role === 'ADMIN' && (
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              style={{ padding: '0.25rem 0.55rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCategory(cat);
+                              }}
+                              title="Hapus Kategori"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="btn btn-outline"
-                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem' }}
-                          disabled={idx === 0}
-                          onClick={() => handleMoveCategory(idx, 'up')}
-                          title="Geser ke Atas"
-                        >
-                          <ChevronUp size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline"
-                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem' }}
-                          disabled={idx === categoriesList.length - 1}
-                          onClick={() => handleMoveCategory(idx, 'down')}
-                          title="Geser ke Bawah"
-                        >
-                          <ChevronDown size={16} />
-                        </button>
-                        {currentUser?.role === 'ADMIN' && (
-                          <button
-                            type="button"
-                            className="btn btn-danger"
-                            style={{ padding: '0.2rem 0.5rem', marginLeft: '6px' }}
-                            onClick={() => handleDeleteCategory(cat)}
-                            title="Hapus Kategori"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
