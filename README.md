@@ -18,7 +18,7 @@ https://program-kasir-local-bice.vercel.app/
 - buat fitur untuk menambah akun admin
 - buat fitur untuk melihat selisih cost production dan juga harga jual dalam persen dan juga nominal
 -  tambah data average revenue per meja
-- tambah data menu yang paling laku dan tidak laku dan juga nominalnnya
+- tambah data menu yang paling laku dan tidak laku dan juga nominalnnya✅
 - tambah fitur untuk melihat diakhir shift/hari jam/shift paling ramai
 - tambah gambar menu/promo baru yang dibuat oleh restoran di tampilan customer
 

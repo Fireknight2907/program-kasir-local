@@ -57,6 +57,9 @@ export default function CashierDashboard() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('CASH');
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
+  // Statistics sub-tab state ('tables' | 'items')
+  const [statsSubTab, setStatsSubTab] = useState('tables');
+
   // Menu management state
   const [menuList, setMenuList] = useState([]);
   const [loadingMenu, setLoadingMenu] = useState(true);
@@ -229,6 +232,7 @@ export default function CashierDashboard() {
     let durationCountOverall = 0;
 
     const tableMap = {};
+    const itemMap = {};
 
     const paymentMethods = {
       CASH: { count: 0, revenue: 0 },
@@ -281,6 +285,32 @@ export default function CashierDashboard() {
           durationCountOverall += 1;
         }
       }
+
+      if (trx.orders && Array.isArray(trx.orders)) {
+        trx.orders.forEach(order => {
+          if (order.items && Array.isArray(order.items)) {
+            order.items.forEach(item => {
+              const name = item.menuItem?.name || 'Item Tidak Dikenal';
+              const category = item.menuItem?.category || 'Lainnya';
+              const qty = Number(item.quantity) || 0;
+              const price = Number(item.price) || 0;
+              const itemTotal = qty * price;
+
+              if (!itemMap[name]) {
+                itemMap[name] = {
+                  name,
+                  category,
+                  quantity: 0,
+                  totalRevenue: 0,
+                  unitPrice: price,
+                };
+              }
+              itemMap[name].quantity += qty;
+              itemMap[name].totalRevenue += itemTotal;
+            });
+          }
+        });
+      }
     });
 
     const avgDurationMsOverall = durationCountOverall > 0 ? (totalDurationMsOverall / durationCountOverall) : 0;
@@ -295,8 +325,18 @@ export default function CashierDashboard() {
       };
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
+    const itemList = Object.values(itemMap).map(item => {
+      const revenueSharePercent = totalRevenueOverall > 0 ? ((item.totalRevenue / totalRevenueOverall) * 100) : 0;
+      return {
+        ...item,
+        revenueSharePercent
+      };
+    }).sort((a, b) => b.quantity - a.quantity || b.totalRevenue - a.totalRevenue);
+
     const topTurnoverTable = [...tableList].sort((a, b) => b.turnoverCount - a.turnoverCount)[0] || null;
     const topRevenueTable = tableList[0] || null;
+    const mostSoldItem = itemList.length > 0 ? itemList[0] : null;
+    const leastSoldItem = itemList.length > 0 ? itemList[itemList.length - 1] : null;
 
     return {
       totalRevenueOverall,
@@ -306,6 +346,9 @@ export default function CashierDashboard() {
       tableList,
       topTurnoverTable,
       topRevenueTable,
+      itemList,
+      mostSoldItem,
+      leastSoldItem,
     };
   };
 
@@ -2573,7 +2616,7 @@ export default function CashierDashboard() {
                     </div>
                   </div>
 
-                  {/* Card 5: Top Turnover Table (5th item wraps to row 2) */}
+                  {/* Card 5: Top Turnover Table */}
                   <div style={{ background: 'rgba(236, 72, 153, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(236, 72, 153, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Meja Paling Sering Terisi</span>
@@ -2590,113 +2633,270 @@ export default function CashierDashboard() {
                       </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Table Breakdown Details */}
-                <div className="glass-card p-5" style={{ borderRadius: '16px', background: 'var(--card-bg)', border: '1px solid var(--border-color)' }}>
-                  <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Utensils size={18} style={{ color: 'var(--primary-color)' }} />
-                      Rincian Performa & Perputaran Per Meja
-                    </h3>
-                    <span style={{ fontSize: '0.82rem', opacity: 0.7 }}>
-                      Menampilkan {stats.tableList.length} nomor meja / lokasi
-                    </span>
+                  {/* Card 6: Most Sold Menu Item */}
+                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 700 }}>Menu Paling Laku</span>
+                      <div style={{ background: 'rgba(5, 150, 105, 0.15)', color: '#059669', padding: '6px', borderRadius: '10px' }}>
+                        <TrendingUp size={18} />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 900, color: '#047857', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {stats.mostSoldItem ? stats.mostSoldItem.name : '-'}
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#047857' }}>
+                        {stats.mostSoldItem ? `${stats.mostSoldItem.quantity}x terjual (Rp ${stats.mostSoldItem.totalRevenue.toLocaleString('id-ID')})` : '-'}
+                      </p>
+                    </div>
                   </div>
 
-                  {stats.tableList.length > 0 ? (
-                    <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                        <thead>
-                          <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                            <th style={{ padding: '0.85rem 1rem', width: '50px' }}>No</th>
-                            <th style={{ padding: '0.85rem 1rem' }}>Nomor Meja</th>
-                            <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Jumlah Perputaran (Turnover)</th>
-                            <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Rata-Rata Durasi Terisi</th>
-                            <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue Meja</th>
-                            <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stats.tableList.map((item, idx) => (
-                            <tr key={item.tableKey} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
-                              <td style={{ padding: '0.8rem 1rem', fontWeight: 600, opacity: 0.6 }}>{idx + 1}</td>
-                              <td style={{ padding: '0.8rem 1rem' }}>
-                                <span style={{
-                                  background: item.isTakeAway ? '#f59e0b' : 'var(--primary-color)',
-                                  color: 'white',
-                                  padding: '0.3rem 0.7rem',
-                                  borderRadius: '8px',
-                                  fontWeight: 800,
-                                  fontSize: '0.85rem',
-                                  display: 'inline-block'
-                                }}>
-                                  {item.label}
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
-                                <span style={{
-                                  background: 'rgba(16, 185, 129, 0.12)',
-                                  color: '#059669',
-                                  padding: '0.3rem 0.75rem',
-                                  borderRadius: '14px',
-                                  fontWeight: 800,
-                                  fontSize: '0.88rem'
-                                }}>
-                                  {item.turnoverCount}x selesai
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.8rem 1rem', textAlign: 'center', fontWeight: 600 }}>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
-                                  <Clock size={14} style={{ color: '#d97706' }} />
-                                  {formatDuration(item.avgDurationMs)}
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--primary-color)', fontSize: '0.95rem' }}>
-                                Rp {item.totalRevenue.toLocaleString('id-ID')}
-                              </td>
-                              <td style={{ padding: '0.8rem 1rem' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
-                                    <span>{item.revenueSharePercent.toFixed(1)}%</span>
+                  {/* Card 7: Least Sold Menu Item */}
+                  <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 700 }}>Menu Paling Tidak Laku</span>
+                      <div style={{ background: 'rgba(220, 38, 38, 0.15)', color: '#dc2626', padding: '6px', borderRadius: '10px' }}>
+                        <Utensils size={18} />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 900, color: '#b91c1c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {stats.leastSoldItem ? stats.leastSoldItem.name : '-'}
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c' }}>
+                        {stats.leastSoldItem ? `${stats.leastSoldItem.quantity}x terjual (Rp ${stats.leastSoldItem.totalRevenue.toLocaleString('id-ID')})` : '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table Breakdown Details with Sub-Tab Switcher */}
+                <div className="glass-card p-5" style={{ borderRadius: '16px', background: 'var(--card-bg)', border: '1px solid var(--border-color)' }}>
+                  {/* Sub-Tab Navigation Buttons */}
+                  <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.85rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setStatsSubTab('tables')}
+                      style={{
+                        background: statsSubTab === 'tables' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
+                        color: statsSubTab === 'tables' ? 'white' : 'var(--text-color)',
+                        border: 'none',
+                        padding: '0.55rem 1.1rem',
+                        borderRadius: '12px',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <Utensils size={18} />
+                      Rincian Performa & Perputaran Per Meja ({stats.tableList.length})
+                    </button>
+                    <button
+                      onClick={() => setStatsSubTab('items')}
+                      style={{
+                        background: statsSubTab === 'items' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
+                        color: statsSubTab === 'items' ? 'white' : 'var(--text-color)',
+                        border: 'none',
+                        padding: '0.55rem 1.1rem',
+                        borderRadius: '12px',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <BarChart3 size={18} />
+                      Penjualan & Kontribusi Menu Makanan ({stats.itemList.length})
+                    </button>
+                  </div>
+
+                  {statsSubTab === 'tables' ? (
+                    /* Sub-Tab 1: Table Performance & Turnover */
+                    stats.tableList.length > 0 ? (
+                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                              <th style={{ padding: '0.85rem 1rem', width: '50px' }}>No</th>
+                              <th style={{ padding: '0.85rem 1rem' }}>Nomor Meja</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Jumlah Perputaran (Turnover)</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Rata-Rata Durasi Terisi</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue Meja</th>
+                              <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {stats.tableList.map((item, idx) => (
+                              <tr key={item.tableKey} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                                <td style={{ padding: '0.8rem 1rem', fontWeight: 600, opacity: 0.6 }}>{idx + 1}</td>
+                                <td style={{ padding: '0.8rem 1rem' }}>
+                                  <span style={{
+                                    background: item.isTakeAway ? '#f59e0b' : 'var(--primary-color)',
+                                    color: 'white',
+                                    padding: '0.3rem 0.7rem',
+                                    borderRadius: '8px',
+                                    fontWeight: 800,
+                                    fontSize: '0.85rem',
+                                    display: 'inline-block'
+                                  }}>
+                                    {item.label}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
+                                  <span style={{
+                                    background: 'rgba(16, 185, 129, 0.12)',
+                                    color: '#059669',
+                                    padding: '0.3rem 0.75rem',
+                                    borderRadius: '14px',
+                                    fontWeight: 800,
+                                    fontSize: '0.88rem'
+                                  }}>
+                                    {item.turnoverCount}x selesai
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'center', fontWeight: 600 }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
+                                    <Clock size={14} style={{ color: '#d97706' }} />
+                                    {formatDuration(item.avgDurationMs)}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--primary-color)', fontSize: '0.95rem' }}>
+                                  Rp {item.totalRevenue.toLocaleString('id-ID')}
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
+                                      <span>{item.revenueSharePercent.toFixed(1)}%</span>
+                                    </div>
+                                    <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{
+                                        width: `${Math.min(100, Math.max(0, item.revenueSharePercent))}%`,
+                                        height: '100%',
+                                        background: item.isTakeAway ? '#f59e0b' : 'var(--primary-color)',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.3s ease'
+                                      }} />
+                                    </div>
                                   </div>
-                                  <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <div style={{
-                                      width: `${Math.min(100, Math.max(0, item.revenueSharePercent))}%`,
-                                      height: '100%',
-                                      background: item.isTakeAway ? '#f59e0b' : 'var(--primary-color)',
-                                      borderRadius: '4px',
-                                      transition: 'width 0.3s ease'
-                                    }} />
-                                  </div>
-                                </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                              <td colSpan={2} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN</td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
+                                {stats.totalTurnoverCount} Perputaran
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#d97706', fontSize: '0.95rem' }}>
+                                Avg: {formatDuration(stats.avgDurationMsOverall)}
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
+                                Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', fontWeight: 800, color: '#2563eb' }}>
+                                100%
                               </td>
                             </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
-                            <td colSpan={2} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN</td>
-                            <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
-                              {stats.totalTurnoverCount} Perputaran
-                            </td>
-                            <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#d97706', fontSize: '0.95rem' }}>
-                              Avg: {formatDuration(stats.avgDurationMsOverall)}
-                            </td>
-                            <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
-                              Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
-                            </td>
-                            <td style={{ padding: '0.9rem 1rem', fontWeight: 800, color: '#2563eb' }}>
-                              100%
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ) : (
+                      <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
+                        Belum ada transaksi selesai pada tanggal {statsDate}.
+                      </p>
+                    )
                   ) : (
-                    <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
-                      Belum ada transaksi selesai pada tanggal {statsDate}.
-                    </p>
+                    /* Sub-Tab 2: Menu Item Sales & Revenue Contribution (Most Sold to Least Sold) */
+                    stats.itemList.length > 0 ? (
+                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                              <th style={{ padding: '0.85rem 1rem', width: '50px' }}>No</th>
+                              <th style={{ padding: '0.85rem 1rem' }}>Nama Makanan / Item</th>
+                              <th style={{ padding: '0.85rem 1rem' }}>Kategori</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Terjual (Porsi)</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Harga Satuan</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue (Rp)</th>
+                              <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {stats.itemList.map((item, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                                <td style={{ padding: '0.8rem 1rem', fontWeight: 600, opacity: 0.6 }}>{idx + 1}</td>
+                                <td style={{ padding: '0.8rem 1rem', fontWeight: 700 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {idx === 0 && <span style={{ fontSize: '0.75rem', background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '6px', fontWeight: 800 }}>Paling Laku</span>}
+                                    {idx === stats.itemList.length - 1 && stats.itemList.length > 1 && <span style={{ fontSize: '0.75rem', background: '#ef4444', color: 'white', padding: '2px 6px', borderRadius: '6px', fontWeight: 800 }}>Paling Sedikit</span>}
+                                    <span>{item.name}</span>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', opacity: 0.8 }}>
+                                  <span style={{ background: 'rgba(0,0,0,0.05)', padding: '0.25rem 0.65rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
+                                    {item.category}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
+                                  <span style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', padding: '0.3rem 0.75rem', borderRadius: '14px', fontWeight: 800, fontSize: '0.88rem' }}>
+                                    {item.quantity}x porsi
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', opacity: 0.8 }}>
+                                  Rp {item.unitPrice.toLocaleString('id-ID')}
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--primary-color)', fontSize: '0.95rem' }}>
+                                  Rp {item.totalRevenue.toLocaleString('id-ID')}
+                                </td>
+                                <td style={{ padding: '0.8rem 1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
+                                      <span>{item.revenueSharePercent.toFixed(1)}%</span>
+                                    </div>
+                                    <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{
+                                        width: `${Math.min(100, Math.max(0, item.revenueSharePercent))}%`,
+                                        height: '100%',
+                                        background: '#10b981',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.3s ease'
+                                      }} />
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                              <td colSpan={3} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN (1 HARI)</td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
+                                {stats.itemList.reduce((sum, i) => sum + i.quantity, 0)} Porsi
+                              </td>
+                              <td></td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
+                                Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', fontWeight: 800, color: '#2563eb' }}>
+                                100%
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ) : (
+                      <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
+                        Belum ada penjualan menu makanan / minuman pada tanggal {statsDate}.
+                      </p>
+                    )
                   )}
                 </div>
               </div>
