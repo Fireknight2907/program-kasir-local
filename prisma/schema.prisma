@@ -23,13 +23,14 @@ model MenuItem {
 }
 
 model Transaction {
-  id          String    @id @default(cuid())
-  tableNumber String?
-  createdAt   DateTime  @default(now())
-  completedAt DateTime?
-  status      String    @default("open") // open, ordered, completed
-  total       Int       @default(0)
-  orders      Order[]
+  id            String    @id @default(cuid())
+  tableNumber   String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  status        String    @default("open") // open, ordered, completed
+  paymentMethod String?   // CASH, QRIS, CARD
+  total         Int       @default(0)
+  orders        Order[]
 }
 
 model Order {

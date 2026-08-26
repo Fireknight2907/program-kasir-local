@@ -10,13 +10,17 @@ https://program-kasir-local-bice.vercel.app/
 - tampilan customer menampilkan apa dan berapa banyak menu yang sudah di pesan
 - buat urutan dari pesanan paling terakhir sampai terbaru dari atas ke bawah✅
 - ngecek scroll menu apakah ada error
-- saat karyawan akan close order maka ada pilihan pembayarannya lewat apa agar lebih terstruktur
+- saat karyawan akan close order maka ada pilihan pembayarannya lewat apa agar lebih terstruktur✅
 - barcode untuk discan agar langsung ketahuan ada di meja berapa atau pakai sistem dimana pelanggan memberi tahu mejanya
 - tambah fitur data waktu open order dan waktu close order✅
 - tambah fitur data untuk mengetahui berapa banyak perputaran dari satu meja✅
 - owner dashboard ( masih dipertimbangkan)
 - buat fitur untuk menambah akun admin
-
+- buat fitur untuk melihat selisih cost production dan juga harga jual dalam persen dan jga nominal
+-  tambah data average revenue per meja
+- tambah data menu yang paling laku dan tidak laku dan juga nominalnnya
+- tambah fitur untuk melihat diakhir shift/hari jam/shift paling ramai
+- tambah gambar menu/promo baru yang dibuat oleh restoran di tampilan customer
 
 
 ## Update

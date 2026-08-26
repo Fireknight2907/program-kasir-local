@@ -32,7 +32,7 @@ export async function PUT(request, { params }) {
   const { id } = await params;
   try {
     const body = await request.json();
-    const { status, tableNumber } = body;
+    const { status, tableNumber, paymentMethod } = body;
     
     if (tableNumber !== undefined && !tableNumber.toLowerCase().startsWith('take away')) {
       const activeTrxs = await prisma.transaction.findMany({
@@ -54,7 +54,8 @@ export async function PUT(request, { params }) {
 
     const updateData = {
       ...(status && { status }),
-      ...(tableNumber !== undefined && { tableNumber })
+      ...(tableNumber !== undefined && { tableNumber }),
+      ...(paymentMethod !== undefined && { paymentMethod })
     };
 
     if (status === 'completed') {

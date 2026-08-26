@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus, Banknote, Smartphone, CreditCard
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -50,6 +50,12 @@ export default function CashierDashboard() {
   const [takeawaySearch, setTakeawaySearch] = useState('');
   const [submittingTakeaway, setSubmittingTakeaway] = useState(false);
   const [takeawayError, setTakeawayError] = useState('');
+
+  // Payment Close Order Modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentTransaction, setPaymentTransaction] = useState(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('CASH');
+  const [submittingPayment, setSubmittingPayment] = useState(false);
 
   // Menu management state
   const [menuList, setMenuList] = useState([]);
@@ -224,9 +230,25 @@ export default function CashierDashboard() {
 
     const tableMap = {};
 
+    const paymentMethods = {
+      CASH: { count: 0, revenue: 0 },
+      QRIS: { count: 0, revenue: 0 },
+      CARD: { count: 0, revenue: 0 },
+      UNSPECIFIED: { count: 0, revenue: 0 }
+    };
+
     validTrxs.forEach(trx => {
       const rev = Number(trx.total) || 0;
       totalRevenueOverall += rev;
+
+      const pm = trx.paymentMethod || 'UNSPECIFIED';
+      if (paymentMethods[pm]) {
+        paymentMethods[pm].count += 1;
+        paymentMethods[pm].revenue += rev;
+      } else {
+        paymentMethods.UNSPECIFIED.count += 1;
+        paymentMethods.UNSPECIFIED.revenue += rev;
+      }
 
       let rawTable = trx.tableNumber ? String(trx.tableNumber).trim() : '0';
       const isTakeAway = rawTable.toLowerCase().startsWith('take away');
@@ -280,6 +302,7 @@ export default function CashierDashboard() {
       totalRevenueOverall,
       totalTurnoverCount,
       avgDurationMsOverall,
+      paymentMethods,
       tableList,
       topTurnoverTable,
       topRevenueTable,
@@ -293,7 +316,23 @@ export default function CashierDashboard() {
     let totalItemsSold = 0;
     const itemMap = {};
 
+    const paymentMethods = {
+      CASH: { count: 0, revenue: 0 },
+      QRIS: { count: 0, revenue: 0 },
+      CARD: { count: 0, revenue: 0 },
+      UNSPECIFIED: { count: 0, revenue: 0 }
+    };
+
     validTrxs.forEach(trx => {
+      const pm = trx.paymentMethod || 'UNSPECIFIED';
+      if (paymentMethods[pm]) {
+        paymentMethods[pm].count += 1;
+        paymentMethods[pm].revenue += Number(trx.total) || 0;
+      } else {
+        paymentMethods.UNSPECIFIED.count += 1;
+        paymentMethods.UNSPECIFIED.revenue += Number(trx.total) || 0;
+      }
+
       if (trx.orders && Array.isArray(trx.orders)) {
         trx.orders.forEach(order => {
           if (order.items && Array.isArray(order.items)) {
@@ -330,6 +369,7 @@ export default function CashierDashboard() {
       totalItemsSold,
       totalTransactions: validTrxs.length,
       totalCancelled: archiveTransactions.filter(trx => trx.status === 'cancelled').length,
+      paymentMethods,
       itemList,
     };
   };
@@ -349,11 +389,16 @@ export default function CashierDashboard() {
         ['REKAPAN PENJUALAN HARIAN'],
         [`Tanggal: ${formattedDateStr}`],
         [],
-        ['RINGKASAN'],
+        ['RINGKASAN PENJUALAN'],
         ['Total Pendapatan Harian', '', recap.totalRevenue],
         ['Total Item / Makanan Terjual', '', `${recap.totalItemsSold} item`],
         ['Total Variasi Menu Laku', '', `${recap.itemList.length} menu`],
         ['Total Transaksi Selesai', '', `${recap.totalTransactions} transaksi`],
+        [],
+        ['METODE PEMBAYARAN'],
+        ['Cash / Tunai', `${recap.paymentMethods.CASH.count} transaksi`, recap.paymentMethods.CASH.revenue],
+        ['QRIS', `${recap.paymentMethods.QRIS.count} transaksi`, recap.paymentMethods.QRIS.revenue],
+        ['Kartu Kredit / Debit ATM', `${recap.paymentMethods.CARD.count} transaksi`, recap.paymentMethods.CARD.revenue],
         [],
         ['RINCIAN PENJUALAN PER MENU'],
         ['No', 'Nama Makanan / Item', 'Kategori', 'Total Terjual (Porsi)', 'Harga Satuan (Rp)', 'Total Pendapatan Menu (Rp)']
@@ -859,18 +904,33 @@ export default function CashierDashboard() {
     setSubmittingTakeaway(false);
   };
 
-  const completeTransaction = async (id) => {
+  const openPaymentModal = (trx) => {
+    setPaymentTransaction(trx);
+    setSelectedPaymentMethod('CASH');
+    setShowPaymentModal(true);
+  };
+
+  const confirmCompleteTransaction = async () => {
+    if (!paymentTransaction) return;
+    setSubmittingPayment(true);
     try {
-      await fetch(`/api/transaction/${id}`, {
+      await fetch(`/api/transaction/${paymentTransaction.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'completed' })
+        body: JSON.stringify({
+          status: 'completed',
+          paymentMethod: selectedPaymentMethod
+        })
       });
+      setShowPaymentModal(false);
+      setPaymentTransaction(null);
       if (activeTab === 'transactions') fetchTransactions();
       if (activeTab === 'archive') fetchArchive();
+      if (activeTab === 'stats') fetchStats();
     } catch (e) {
       console.error(e);
     }
+    setSubmittingPayment(false);
   };
 
   const handleChangeTableNumber = async (id, currentNumber) => {
@@ -1419,6 +1479,24 @@ export default function CashierDashboard() {
                             }
                           </span>
                         </div>
+                        {trx.paymentMethod && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '6px',
+                              background: trx.paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.12)' : trx.paymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                              color: trx.paymentMethod === 'CASH' ? '#059669' : trx.paymentMethod === 'QRIS' ? '#2563eb' : '#7c3aed',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              {trx.paymentMethod === 'CASH' ? <Banknote size={13} /> : trx.paymentMethod === 'QRIS' ? <Smartphone size={13} /> : <CreditCard size={13} />}
+                              Bayar: {trx.paymentMethod === 'CASH' ? 'Cash / Tunai' : trx.paymentMethod === 'QRIS' ? 'QRIS' : 'Kartu Debit/Kredit'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1466,7 +1544,7 @@ export default function CashierDashboard() {
                     {trx.status === 'ordered' && (
                       <button
                         className="btn btn-secondary"
-                        onClick={() => completeTransaction(trx.id)}
+                        onClick={() => openPaymentModal(trx)}
                         style={{ width: '100%', marginBottom: '0.75rem' }}
                       >
                         <Check size={18} style={{ marginRight: '8px' }} /> Tandai Selesai (Sudah Dibayar)
@@ -1706,6 +1784,171 @@ export default function CashierDashboard() {
             </div>
           )}
 
+          {/* Modal Dialog Close Order / Pilih Metode Pembayaran */}
+          {showPaymentModal && paymentTransaction && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '1rem'
+            }}>
+              <div className="glass-card" style={{ width: '100%', maxWidth: '480px', background: 'var(--bg-color)', position: 'relative', borderRadius: '20px', padding: '1.5rem' }}>
+                <div className="flex justify-between items-center mb-4 pb-2" style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Pilih Metode Pembayaran</h3>
+                    <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>
+                      Selesaikan transaksi untuk {paymentTransaction.tableNumber?.toLowerCase().includes('take away') ? paymentTransaction.tableNumber : `Meja ${paymentTransaction.tableNumber || '-'}`}
+                    </p>
+                  </div>
+                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowPaymentModal(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Total Payment Amount Header */}
+                <div style={{
+                  background: 'rgba(99, 102, 241, 0.08)',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(99, 102, 241, 0.2)',
+                  padding: '1rem',
+                  textAlign: 'center',
+                  marginBottom: '1.25rem'
+                }}>
+                  <span style={{ fontSize: '0.82rem', opacity: 0.8, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Tagihan</span>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary-color)', marginTop: '0.2rem' }}>
+                    Rp {paymentTransaction.total.toLocaleString('id-ID')}
+                  </div>
+                </div>
+
+                {/* Payment Method Cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                  {/* Option 1: Cash */}
+                  <div
+                    onClick={() => setSelectedPaymentMethod('CASH')}
+                    style={{
+                      border: selectedPaymentMethod === 'CASH' ? '2px solid #10b981' : '1px solid var(--border-color)',
+                      background: selectedPaymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.08)' : 'var(--card-bg)',
+                      padding: '0.9rem 1rem',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#10b981', color: 'white', padding: '8px', borderRadius: '10px', display: 'flex' }}>
+                        <Banknote size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: selectedPaymentMethod === 'CASH' ? '#047857' : 'inherit' }}>Cash / Tunai</div>
+                        <div style={{ fontSize: '0.78rem', opacity: 0.7 }}>Pembayaran uang tunai fisik di kasir</div>
+                      </div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={selectedPaymentMethod === 'CASH'}
+                      onChange={() => setSelectedPaymentMethod('CASH')}
+                      style={{ accentColor: '#10b981', width: '18px', height: '18px' }}
+                    />
+                  </div>
+
+                  {/* Option 2: QRIS */}
+                  <div
+                    onClick={() => setSelectedPaymentMethod('QRIS')}
+                    style={{
+                      border: selectedPaymentMethod === 'QRIS' ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                      background: selectedPaymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.08)' : 'var(--card-bg)',
+                      padding: '0.9rem 1rem',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#3b82f6', color: 'white', padding: '8px', borderRadius: '10px', display: 'flex' }}>
+                        <Smartphone size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: selectedPaymentMethod === 'QRIS' ? '#1d4ed8' : 'inherit' }}>QRIS</div>
+                        <div style={{ fontSize: '0.78rem', opacity: 0.7 }}>Scan QRIS E-Wallet / Mobile Banking</div>
+                      </div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={selectedPaymentMethod === 'QRIS'}
+                      onChange={() => setSelectedPaymentMethod('QRIS')}
+                      style={{ accentColor: '#3b82f6', width: '18px', height: '18px' }}
+                    />
+                  </div>
+
+                  {/* Option 3: Card */}
+                  <div
+                    onClick={() => setSelectedPaymentMethod('CARD')}
+                    style={{
+                      border: selectedPaymentMethod === 'CARD' ? '2px solid #8b5cf6' : '1px solid var(--border-color)',
+                      background: selectedPaymentMethod === 'CARD' ? 'rgba(139, 92, 246, 0.08)' : 'var(--card-bg)',
+                      padding: '0.9rem 1rem',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#8b5cf6', color: 'white', padding: '8px', borderRadius: '10px', display: 'flex' }}>
+                        <CreditCard size={22} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: selectedPaymentMethod === 'CARD' ? '#6d28d9' : 'inherit' }}>Kartu Kredit / Debit ATM</div>
+                        <div style={{ fontSize: '0.78rem', opacity: 0.7 }}>Mesin EDC Bank Debit / Kredit</div>
+                      </div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={selectedPaymentMethod === 'CARD'}
+                      onChange={() => setSelectedPaymentMethod('CARD')}
+                      style={{ accentColor: '#8b5cf6', width: '18px', height: '18px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 justify-between">
+                  <button type="button" className="btn btn-outline" style={{ width: '35%' }} onClick={() => setShowPaymentModal(false)}>
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: '65%', fontWeight: 800, borderRadius: '14px', padding: '0.75rem' }}
+                    onClick={confirmCompleteTransaction}
+                    disabled={submittingPayment}
+                  >
+                    {submittingPayment ? 'Memproses...' : 'Selesaikan Transaksi & Bayar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Modal Dialog Input Nomor Meja */}
           {showTableModal && (
             <div style={{
@@ -1940,7 +2183,7 @@ export default function CashierDashboard() {
                     </div>
 
                     {/* Stat Summary Cards */}
-                    <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="grid grid-cols-3 gap-4 mb-4">
                       <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                         <p style={{ margin: 0, fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>Total Pendapatan Harian</p>
                         <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#1d4ed8' }}>
@@ -1958,6 +2201,57 @@ export default function CashierDashboard() {
                         <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#b45309' }}>
                           {recap.itemList.length} <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>menu</span>
                         </h3>
+                      </div>
+                    </div>
+
+                    {/* Payment Methods Breakdown Cards */}
+                    <div style={{ marginBottom: '1.5rem', background: 'rgba(0,0,0,0.02)', padding: '1rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Receipt size={18} style={{ color: 'var(--primary-color)' }} />
+                        Rincian Metode Pembayaran (Metode Payment)
+                      </h4>
+                      <div className="grid grid-cols-3 gap-3">
+                        {/* Cash */}
+                        <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ background: '#10b981', color: 'white', padding: '6px', borderRadius: '8px' }}>
+                            <Banknote size={20} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#047857' }}>Cash / Tunai</div>
+                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#047857' }}>
+                              Rp {recap.paymentMethods.CASH.revenue.toLocaleString('id-ID')}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', opacity: 0.7 }}>{recap.paymentMethods.CASH.count} transaksi</div>
+                          </div>
+                        </div>
+
+                        {/* QRIS */}
+                        <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ background: '#3b82f6', color: 'white', padding: '6px', borderRadius: '8px' }}>
+                            <Smartphone size={20} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1d4ed8' }}>QRIS</div>
+                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1d4ed8' }}>
+                              Rp {recap.paymentMethods.QRIS.revenue.toLocaleString('id-ID')}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', opacity: 0.7 }}>{recap.paymentMethods.QRIS.count} transaksi</div>
+                          </div>
+                        </div>
+
+                        {/* Card */}
+                        <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid rgba(139, 92, 246, 0.2)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ background: '#8b5cf6', color: 'white', padding: '6px', borderRadius: '8px' }}>
+                            <CreditCard size={20} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6d28d9' }}>Kartu Kredit / Debit ATM</div>
+                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#6d28d9' }}>
+                              Rp {recap.paymentMethods.CARD.revenue.toLocaleString('id-ID')}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', opacity: 0.7 }}>{recap.paymentMethods.CARD.count} transaksi</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -2073,6 +2367,24 @@ export default function CashierDashboard() {
                           }
                         </span>
                       </div>
+                      {trx.paymentMethod && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                          <span style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '6px',
+                            background: trx.paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.12)' : trx.paymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                            color: trx.paymentMethod === 'CASH' ? '#059669' : trx.paymentMethod === 'QRIS' ? '#2563eb' : '#7c3aed',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            {trx.paymentMethod === 'CASH' ? <Banknote size={13} /> : trx.paymentMethod === 'QRIS' ? <Smartphone size={13} /> : <CreditCard size={13} />}
+                            Bayar: {trx.paymentMethod === 'CASH' ? 'Cash / Tunai' : trx.paymentMethod === 'QRIS' ? 'QRIS' : 'Kartu Debit/Kredit'}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {trx.orders && trx.orders.length > 0 ? (
