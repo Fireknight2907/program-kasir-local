@@ -46,6 +46,7 @@ tambah menu statistik meja
 tambah fitur waktu open dan close order
 tambah fitur payment method setelah kelar makan
 tambah data turnover meja
+tambah fitur untuk melihat kontribusi menu untuk revenue
 
 
 
