@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -1176,9 +1176,26 @@ export default function CashierDashboard() {
                         {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
                       </span>
                     </div>
-                    <div style={{ marginBottom: '1rem' }}>
-                      <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', opacity: 0.8, wordBreak: 'break-all' }}>ID: {trx.id.substring(0, 20)}...</h3>
-                      <p style={{ fontSize: '0.85rem', margin: 0, opacity: 0.8 }}>Waktu: {new Date(trx.createdAt).toLocaleString('id-ID')}</p>
+                    <div style={{ marginBottom: '0.85rem' }}>
+                      <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '0.82rem', opacity: 0.7, wordBreak: 'break-all' }}>ID: {trx.id.substring(0, 20)}...</h3>
+                      <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                          <span><strong>Order Dibuat:</strong> {trx.createdAt ? new Date(trx.createdAt).toLocaleString('id-ID') : '-'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CheckCircle size={14} style={{ color: trx.completedAt || trx.status === 'completed' ? '#10b981' : '#9ca3af', flexShrink: 0 }} />
+                          <span>
+                            <strong>Order Selesai:</strong> {
+                              trx.completedAt 
+                                ? new Date(trx.completedAt).toLocaleString('id-ID') 
+                                : trx.status === 'completed' 
+                                  ? new Date(trx.createdAt).toLocaleString('id-ID') 
+                                  : <span style={{ opacity: 0.65, fontStyle: 'italic' }}>Belum Selesai</span>
+                            }
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     {trx.orders && trx.orders.length > 0 ? (
@@ -1643,7 +1660,24 @@ export default function CashierDashboard() {
                         {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
                       </span>
                     </div>
-                    <p style={{ fontSize: '0.85rem' }}>Waktu: {new Date(trx.createdAt).toLocaleString('id-ID')}</p>
+                    <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.85rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                        <span><strong>Order Dibuat:</strong> {trx.createdAt ? new Date(trx.createdAt).toLocaleString('id-ID') : '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle size={14} style={{ color: trx.completedAt || trx.status === 'completed' ? '#10b981' : '#9ca3af', flexShrink: 0 }} />
+                        <span>
+                          <strong>Order Selesai:</strong> {
+                            trx.completedAt 
+                              ? new Date(trx.completedAt).toLocaleString('id-ID') 
+                              : trx.status === 'completed' 
+                                ? new Date(trx.createdAt).toLocaleString('id-ID') 
+                                : <span style={{ opacity: 0.65, fontStyle: 'italic' }}>Belum Selesai</span>
+                          }
+                        </span>
+                      </div>
+                    </div>
 
                     {trx.orders && trx.orders.length > 0 ? (
                       <div className="mt-4">

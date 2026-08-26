@@ -1,7 +1,7 @@
 https://program-kasir-local-bice.vercel.app/
 
 - gambar yang ditampilkan tidak akan stretch
-- saat print barcode menampilkan (barcode, tanggal, nomor meja) ✅ sisa tambah tanggal
+- saat print barcode menampilkan (barcode, tanggal, nomor meja) ✅ sisa tambah tanggal ✅
 - UI diperbagus
 - no HP di karyawan hanya bisa memasukan nomor
 - tambah fitur edit urutan dan hapus kategori menu✅
@@ -10,6 +10,11 @@ https://program-kasir-local-bice.vercel.app/
 - tampilan customer menampilkan apa dan berapa banyak menu yang sudah di pesan
 - buat urutan dari pesanan paling terakhir sampai terbaru dari atas ke bawah✅
 - ngecek scroll menu apakah ada error
+- saat karyawan akan close order maka ada pilihan pembayarannya lewat apa agar lebih terstruktur✅
+- barcode untuk discan agar langsung ketahuan ada di meja berapa atau pakai sistem dimana pelanggan memberi tahu mejanya
+- tambah fitur data waktu open order dan waktu close order
+- tambah fitur data untuk mengetahui berapa banyak perputaran dari satu meja
+- owner dashboard ( masih dipertimbangkan)
 
 
 
@@ -25,6 +30,9 @@ tambah fitur edit urutan dan hapus dari kategori makanan
 8/22
 tambah fitur urutan orderan dari yang paling baru sampai terakhir
 
+8/23
+tambah tanggal dan waktu saat ngeprint qrcode
+ubah menu kelola kategori menu agar bisa digeser keatas dan kebawah
 
 
 

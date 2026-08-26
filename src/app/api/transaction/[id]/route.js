@@ -52,12 +52,20 @@ export async function PUT(request, { params }) {
       }
     }
 
+    const updateData = {
+      ...(status && { status }),
+      ...(tableNumber !== undefined && { tableNumber })
+    };
+
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
+    } else if (status && status !== 'completed') {
+      updateData.completedAt = null;
+    }
+
     const transaction = await prisma.transaction.update({
       where: { id },
-      data: { 
-        ...(status && { status }),
-        ...(tableNumber !== undefined && { tableNumber })
-      }
+      data: updateData
     });
     
     return NextResponse.json(transaction);

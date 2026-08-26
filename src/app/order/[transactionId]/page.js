@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, use } from 'react';
-import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils, Search, X, ShoppingBag } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils, Search, X, ShoppingBag, Clock } from 'lucide-react';
 
 export default function OrderPage({ params }) {
   const { transactionId } = use(params);
@@ -186,7 +186,37 @@ export default function OrderPage({ params }) {
             <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary-color)' }}>
               Nomor Meja: {transaction?.tableNumber || transactionId.split('-')[1] || '-'}
             </p>
-            <p style={{ margin: '0.4rem 0', fontSize: '0.8rem', opacity: 0.7 }}>ID: <code>{transactionId}</code></p>
+            <p style={{ margin: '0.4rem 0 0.8rem 0', fontSize: '0.8rem', opacity: 0.7 }}>ID: <code>{transactionId}</code></p>
+            
+            <div style={{
+              fontSize: '0.82rem',
+              background: 'rgba(255,255,255,0.7)',
+              padding: '0.55rem 0.75rem',
+              borderRadius: '12px',
+              border: '1px solid rgba(0,0,0,0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              textAlign: 'left'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                <span><strong>Order Dibuat:</strong> {transaction?.createdAt ? new Date(transaction.createdAt).toLocaleString('id-ID') : '-'}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle size={14} style={{ color: transaction?.completedAt || transaction?.status === 'completed' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                <span>
+                  <strong>Order Selesai:</strong> {
+                    transaction?.completedAt
+                      ? new Date(transaction.completedAt).toLocaleString('id-ID')
+                      : transaction?.status === 'completed'
+                        ? new Date(transaction.createdAt).toLocaleString('id-ID')
+                        : <span style={{ opacity: 0.7, fontStyle: 'italic' }}>Sedang Diproses (Belum Selesai)</span>
+                  }
+                </span>
+              </div>
+            </div>
+
             <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
               <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Mohon tunggu di meja Anda.</p>
               <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.8 }}>Pembayaran dilakukan di meja kasir setelah selesai.</p>
