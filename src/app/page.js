@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -42,6 +42,14 @@ export default function CashierDashboard() {
   const [statsTransactions, setStatsTransactions] = useState([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [statsDate, setStatsDate] = useState('');
+
+  // Direct Takeaway state
+  const [showDirectTakeawayModal, setShowDirectTakeawayModal] = useState(false);
+  const [takeawayCustomerName, setTakeawayCustomerName] = useState('');
+  const [takeawayCart, setTakeawayCart] = useState({});
+  const [takeawaySearch, setTakeawaySearch] = useState('');
+  const [submittingTakeaway, setSubmittingTakeaway] = useState(false);
+  const [takeawayError, setTakeawayError] = useState('');
 
   // Menu management state
   const [menuList, setMenuList] = useState([]);
@@ -768,6 +776,89 @@ export default function CashierDashboard() {
     setGeneratingQr(false);
   };
 
+  const openDirectTakeawayModal = () => {
+    setTakeawayCustomerName('');
+    setTakeawayCart({});
+    setTakeawaySearch('');
+    setTakeawayError('');
+    setShowDirectTakeawayModal(true);
+  };
+
+  const updateTakeawayCart = (item, delta) => {
+    setTakeawayCart(prev => {
+      const currentQty = prev[item.id]?.quantity || 0;
+      const newQty = Math.max(0, currentQty + delta);
+      const newCart = { ...prev };
+      if (newQty === 0) {
+        delete newCart[item.id];
+      } else {
+        newCart[item.id] = { menuItem: item, quantity: newQty, price: item.price };
+      }
+      return newCart;
+    });
+  };
+
+  const handleCreateDirectTakeaway = async (e) => {
+    if (e) e.preventDefault();
+    const cartItems = Object.values(takeawayCart);
+    if (cartItems.length === 0) {
+      setTakeawayError('Silakan pilih minimal 1 menu makanan / minuman.');
+      return;
+    }
+
+    setSubmittingTakeaway(true);
+    setTakeawayError('');
+
+    try {
+      const namePart = takeawayCustomerName.trim() ? takeawayCustomerName.trim() : Math.floor(100 + Math.random() * 900);
+      const finalTableNumber = `Take Away - ${namePart}`;
+
+      // 1. Create transaction
+      const trxRes = await fetch('/api/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableNumber: finalTableNumber })
+      });
+
+      const trxData = await trxRes.json();
+      if (!trxRes.ok) {
+        setTakeawayError(trxData.error || 'Gagal membuat transaksi Take Away.');
+        setSubmittingTakeaway(false);
+        return;
+      }
+
+      // 2. Submit order items directly
+      const orderPayload = {
+        transactionId: trxData.id,
+        items: cartItems.map(item => ({
+          menuItemId: item.menuItem.id,
+          quantity: item.quantity,
+          price: item.price
+        })),
+        isTakeaway: true
+      };
+
+      const orderRes = await fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload)
+      });
+
+      if (orderRes.ok) {
+        setShowDirectTakeawayModal(false);
+        setTakeawayCart({});
+        fetchTransactions();
+      } else {
+        const orderErr = await orderRes.json();
+        setTakeawayError(orderErr.error || 'Gagal membuat pesanan Take Away.');
+      }
+    } catch (err) {
+      console.error(err);
+      setTakeawayError('Terjadi kesalahan server.');
+    }
+    setSubmittingTakeaway(false);
+  };
+
   const completeTransaction = async (id) => {
     try {
       await fetch(`/api/transaction/${id}`, {
@@ -1179,6 +1270,13 @@ export default function CashierDashboard() {
               <button className="btn btn-outline" onClick={fetchTransactions}>
                 <RefreshCcw size={18} style={{ marginRight: '8px' }} /> Refresh
               </button>
+              <button 
+                className="btn" 
+                style={{ background: '#f59e0b', color: 'white', borderColor: '#f59e0b' }} 
+                onClick={openDirectTakeawayModal}
+              >
+                <ShoppingBag size={18} style={{ marginRight: '8px' }} /> Pesan Take Away Direct
+              </button>
               <button className="btn btn-primary" onClick={openTableModal}>
                 <Plus size={18} style={{ marginRight: '8px' }} /> Buat QR Pesanan Baru
               </button>
@@ -1425,6 +1523,186 @@ export default function CashierDashboard() {
               {transactions.length === 0 && !loadingTransactions && (
                 <p>Belum ada transaksi hari ini.</p>
               )}
+            </div>
+          )}
+
+          {/* Modal Dialog Direct Take Away Order (Tanpa QR) */}
+          {showDirectTakeawayModal && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '1rem'
+            }}>
+              <div className="glass-card" style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', background: 'var(--bg-color)', display: 'flex', flexDirection: 'column', padding: '1.25rem' }}>
+                <div className="flex justify-between items-center mb-3 pb-2" style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <div className="flex items-center gap-2">
+                    <div style={{ background: '#f59e0b', color: 'white', padding: '6px', borderRadius: '10px' }}>
+                      <ShoppingBag size={20} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Pesan Take Away Direct (Tanpa QR)</h3>
+                      <p style={{ margin: 0, fontSize: '0.78rem', opacity: 0.7 }}>Buat pesanan dibungkus langsung dari kasir/admin</p>
+                    </div>
+                  </div>
+                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowDirectTakeawayModal(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {takeawayError && (
+                  <div style={{
+                    padding: '0.6rem 0.8rem',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid #ef4444',
+                    color: '#ef4444',
+                    fontSize: '0.85rem',
+                    marginBottom: '0.75rem'
+                  }}>
+                    {takeawayError}
+                  </div>
+                )}
+
+                {/* Customer Name Input */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                    Nama Pelanggan / Catatan Antrean (Opsional):
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Contoh: Pak Budi, Antrean 03..."
+                    value={takeawayCustomerName}
+                    onChange={(e) => setTakeawayCustomerName(e.target.value)}
+                    style={{ fontSize: '0.85rem', borderRadius: '10px' }}
+                  />
+                </div>
+
+                {/* Main 2-Column Section */}
+                <div className="flex flex-col md:flex-row gap-4 overflow-hidden" style={{ flex: 1, minHeight: 0 }}>
+                  {/* Left Column: Menu Picker */}
+                  <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: '1px solid var(--border-color)', paddingRight: '0.75rem' }}>
+                    <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Cari makanan / minuman..."
+                        style={{ paddingLeft: '2.2rem', fontSize: '0.85rem', borderRadius: '10px' }}
+                        value={takeawaySearch}
+                        onChange={(e) => setTakeawaySearch(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
+                      {menuList
+                        .filter(item => item.isAvailable !== false)
+                        .filter(item => item.name.toLowerCase().includes(takeawaySearch.toLowerCase()) || (item.category && item.category.toLowerCase().includes(takeawaySearch.toLowerCase())))
+                        .map(item => {
+                          const cartQty = takeawayCart[item.id]?.quantity || 0;
+                          return (
+                            <div key={item.id} className="flex justify-between items-center p-2" style={{ background: 'var(--card-bg)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                              <div style={{ flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+                                <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</h4>
+                                <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700 }}>
+                                  Rp {item.price.toLocaleString('id-ID')}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                {cartQty > 0 ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(239, 68, 68, 0.08)', padding: '0.15rem 0.35rem', borderRadius: '14px', border: '1px solid #ef4444' }}>
+                                    <button
+                                      onClick={() => updateTakeawayCart(item, -1)}
+                                      style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#ef4444', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    >
+                                      <Minus size={12} />
+                                    </button>
+                                    <span style={{ fontWeight: 800, fontSize: '0.85rem', minWidth: '18px', textAlign: 'center', color: '#ef4444' }}>
+                                      {cartQty}
+                                    </span>
+                                    <button
+                                      onClick={() => updateTakeawayCart(item, 1)}
+                                      style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#ef4444', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    >
+                                      <Plus size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => updateTakeawayCart(item, 1)}
+                                    style={{ padding: '0.3rem 0.75rem', borderRadius: '12px', background: '#ef4444', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}
+                                  >
+                                    + Tambah
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Selected Items Cart Summary */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', fontWeight: 800 }}>Ringkasan Pesanan Take Away</h4>
+                    
+                    <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem', paddingRight: '0.25rem', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '0.5rem', background: 'rgba(0,0,0,0.02)' }}>
+                      {Object.values(takeawayCart).length === 0 ? (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontStyle: 'italic', opacity: 0.6, fontSize: '0.85rem' }}>
+                          Belum ada item dipilih.
+                        </div>
+                      ) : (
+                        Object.values(takeawayCart).map(item => (
+                          <div key={item.menuItem.id} className="flex justify-between items-center p-2" style={{ background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ flex: 1 }}>
+                              <h5 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>{item.menuItem.name}</h5>
+                              <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>
+                                {item.quantity} x Rp {item.price.toLocaleString('id-ID')}
+                              </span>
+                            </div>
+                            <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#ef4444' }}>
+                              Rp {(item.quantity * item.price).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                      <div className="flex justify-between items-center mb-3">
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Total Pembayaran:</span>
+                        <span style={{ fontWeight: 900, fontSize: '1.2rem', color: '#ef4444' }}>
+                          Rp {Object.values(takeawayCart).reduce((sum, i) => sum + (i.price * i.quantity), 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button className="btn btn-outline" style={{ width: '35%', fontSize: '0.85rem' }} onClick={() => setShowDirectTakeawayModal(false)}>
+                          Batal
+                        </button>
+                        <button
+                          className="btn"
+                          style={{ width: '65%', background: '#f59e0b', color: 'white', borderColor: '#f59e0b', fontWeight: 800, fontSize: '0.88rem' }}
+                          onClick={handleCreateDirectTakeaway}
+                          disabled={submittingTakeaway || Object.keys(takeawayCart).length === 0}
+                        >
+                          {submittingTakeaway ? 'Mengirim...' : 'Kirim Pesanan Take Away'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
