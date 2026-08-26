@@ -741,7 +741,7 @@ export default function CashierDashboard() {
 
   const handleCreateTransactionWithTable = async (e) => {
     e.preventDefault();
-    if (!isTakeAway && !inputTableNumber.trim()) {
+    if (!inputTableNumber.trim()) {
       setTableModalError('Nomor meja wajib diisi.');
       return;
     }
@@ -749,7 +749,7 @@ export default function CashierDashboard() {
     setGeneratingQr(true);
     setTableModalError('');
     try {
-      const finalTableNumber = isTakeAway ? `Take Away - ${Math.floor(100 + Math.random() * 900)}` : inputTableNumber.trim();
+      const finalTableNumber = inputTableNumber.trim();
       const res = await fetch('/api/transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1746,25 +1746,17 @@ export default function CashierDashboard() {
 
                 <form onSubmit={handleCreateTransactionWithTable} className="flex flex-col gap-4">
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600 }}>
-                        Nomor Meja Pelanggan *
-                      </label>
-                      <label style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#047857', fontWeight: 700 }}>
-                        <input type="checkbox" checked={isTakeAway} onChange={(e) => setIsTakeAway(e.target.checked)} />
-                        Take Away (Bungkus)
-                      </label>
-                    </div>
+                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                      Nomor Meja Pelanggan *
+                    </label>
                     <input
                       type="text"
                       className="input"
                       placeholder="Contoh: 05, 12, A1..."
                       value={inputTableNumber}
                       onChange={(e) => setInputTableNumber(e.target.value)}
-                      disabled={isTakeAway}
                       autoFocus
-                      required={!isTakeAway}
-                      style={{ opacity: isTakeAway ? 0.5 : 1 }}
+                      required
                     />
                     <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.4rem' }}>
                       Nomor meja ini akan digunakan sebagai ID unik transaksi dan dicetak pada QR Code.
@@ -2195,70 +2187,96 @@ export default function CashierDashboard() {
               <p style={{ fontStyle: 'italic', opacity: 0.8 }}>Memuat data statistik meja...</p>
             ) : (
               <div>
-                {/* 4 Summary Stat Cards */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
-                  {/* Total Revenue */}
-                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                {/* 4 Cards per Row Square Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  {/* Card 1: Total Revenue */}
+                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 700 }}>Revenue Keseluruhan</span>
                       <div style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#2563eb', padding: '6px', borderRadius: '10px' }}>
                         <TrendingUp size={18} />
                       </div>
                     </div>
-                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#1d4ed8' }}>
-                      Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
-                    </h3>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
-                      {formattedDateStr}
-                    </p>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#1d4ed8' }}>
+                        Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                        {formattedDateStr}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Total Turnover */}
-                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  {/* Card 2: Total Turnover */}
+                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 700 }}>Total Perputaran Meja</span>
                       <div style={{ background: 'rgba(5, 150, 105, 0.15)', color: '#059669', padding: '6px', borderRadius: '10px' }}>
                         <RefreshCcw size={18} />
                       </div>
                     </div>
-                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#047857' }}>
-                      {stats.totalTurnoverCount} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>kali</span>
-                    </h3>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
-                      Total meja terpakai & selesai
-                    </p>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#047857' }}>
+                        {stats.totalTurnoverCount} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>kali</span>
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                        Total meja terpakai & selesai
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Average Table Duration */}
-                  <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  {/* Card 3: Average Table Duration */}
+                  <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 700 }}>Avg Durasi Meja</span>
                       <div style={{ background: 'rgba(217, 119, 6, 0.15)', color: '#d97706', padding: '6px', borderRadius: '10px' }}>
                         <Timer size={18} />
                       </div>
                     </div>
-                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#b45309' }}>
-                      {formatDuration(stats.avgDurationMsOverall)}
-                    </h3>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
-                      Rata-rata waktu open -> selesai
-                    </p>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#b45309' }}>
+                        {formatDuration(stats.avgDurationMsOverall)}
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                        Rata-rata waktu open -> selesai
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Top Performer Table */}
-                  <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  {/* Card 4: Top Revenue Table */}
+                  <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#7c3aed', fontWeight: 700 }}>Meja Revenue Terbanyak</span>
                       <div style={{ background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', padding: '6px', borderRadius: '10px' }}>
                         <Award size={18} />
                       </div>
                     </div>
-                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#6d28d9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {stats.topRevenueTable ? stats.topRevenueTable.label : '-'}
-                    </h3>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#6d28d9' }}>
-                      {stats.topRevenueTable ? `Rp ${stats.topRevenueTable.totalRevenue.toLocaleString('id-ID')}` : '-'}
-                    </p>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#6d28d9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {stats.topRevenueTable ? stats.topRevenueTable.label : '-'}
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#6d28d9' }}>
+                        {stats.topRevenueTable ? `Rp ${stats.topRevenueTable.totalRevenue.toLocaleString('id-ID')}` : '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Card 5: Top Turnover Table (5th item wraps to row 2) */}
+                  <div style={{ background: 'rgba(236, 72, 153, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(236, 72, 153, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Meja Paling Sering Terisi</span>
+                      <div style={{ background: 'rgba(219, 39, 119, 0.15)', color: '#db2777', padding: '6px', borderRadius: '10px' }}>
+                        <Utensils size={18} />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#be185d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {stats.topTurnoverTable ? stats.topTurnoverTable.label : '-'}
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#be185d' }}>
+                        {stats.topTurnoverTable ? `${stats.topTurnoverTable.turnoverCount}x diputar` : '-'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 

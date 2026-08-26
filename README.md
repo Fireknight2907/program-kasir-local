@@ -35,7 +35,10 @@ tambah fitur urutan orderan dari yang paling baru sampai terakhir
 tambah tanggal dan waktu saat ngeprint qrcode
 ubah menu kelola kategori menu agar bisa digeser keatas dan kebawah
 
-
+8/26
+fitur take away langsung tidak perlu qrcode lagi
+tambah menu statistik meja
+tambah fitur waktu open dan close order
 
 
 
