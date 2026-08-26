@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -37,6 +37,11 @@ export default function CashierDashboard() {
   const [archiveTransactions, setArchiveTransactions] = useState([]);
   const [loadingArchive, setLoadingArchive] = useState(false);
   const [archiveDate, setArchiveDate] = useState('');
+
+  // Statistics state
+  const [statsTransactions, setStatsTransactions] = useState([]);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [statsDate, setStatsDate] = useState('');
 
   // Menu management state
   const [menuList, setMenuList] = useState([]);
@@ -169,6 +174,108 @@ export default function CashierDashboard() {
       console.error(e);
     }
     setLoadingArchive(false);
+  };
+
+  // Fetch statistics transactions
+  const fetchStats = async () => {
+    setLoadingStats(true);
+    try {
+      const dateToFetch = statsDate || getLocalDateString();
+      const res = await fetch(`/api/transaction?date=${dateToFetch}&tab=archive`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setStatsTransactions(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoadingStats(false);
+  };
+
+  // Format duration helper (in minutes/hours)
+  const formatDuration = (ms) => {
+    if (!ms || ms <= 0) return '-';
+    const totalMinutes = Math.round(ms / (1000 * 60));
+    if (totalMinutes < 1) return '< 1 mnt';
+    if (totalMinutes < 60) return `${totalMinutes} mnt`;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours} j ${minutes} mnt` : `${hours} j`;
+  };
+
+  // Calculate Table Statistics
+  const calculateTableStats = () => {
+    const validTrxs = statsTransactions.filter(trx => trx.status === 'completed');
+    let totalRevenueOverall = 0;
+    let totalTurnoverCount = validTrxs.length;
+    let totalDurationMsOverall = 0;
+    let durationCountOverall = 0;
+
+    const tableMap = {};
+
+    validTrxs.forEach(trx => {
+      const rev = Number(trx.total) || 0;
+      totalRevenueOverall += rev;
+
+      let rawTable = trx.tableNumber ? String(trx.tableNumber).trim() : '0';
+      const isTakeAway = rawTable.toLowerCase().startsWith('take away');
+      const tableLabel = isTakeAway ? rawTable : `Meja ${rawTable}`;
+
+      if (!tableMap[rawTable]) {
+        tableMap[rawTable] = {
+          tableKey: rawTable,
+          label: tableLabel,
+          isTakeAway,
+          turnoverCount: 0,
+          totalRevenue: 0,
+          totalDurationMs: 0,
+          durationCount: 0,
+        };
+      }
+
+      tableMap[rawTable].turnoverCount += 1;
+      tableMap[rawTable].totalRevenue += rev;
+
+      if (trx.createdAt && trx.completedAt) {
+        const start = new Date(trx.createdAt).getTime();
+        const end = new Date(trx.completedAt).getTime();
+        const durationMs = Math.max(0, end - start);
+        if (durationMs > 0) {
+          tableMap[rawTable].totalDurationMs += durationMs;
+          tableMap[rawTable].durationCount += 1;
+
+          totalDurationMsOverall += durationMs;
+          durationCountOverall += 1;
+        }
+      }
+    });
+
+    const avgDurationMsOverall = durationCountOverall > 0 ? (totalDurationMsOverall / durationCountOverall) : 0;
+
+    const tableList = Object.values(tableMap).map(t => {
+      const avgDurationMs = t.durationCount > 0 ? (t.totalDurationMs / t.durationCount) : 0;
+      const revenueSharePercent = totalRevenueOverall > 0 ? ((t.totalRevenue / totalRevenueOverall) * 100) : 0;
+      return {
+        ...t,
+        avgDurationMs,
+        revenueSharePercent,
+      };
+    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+    const topTurnoverTable = [...tableList].sort((a, b) => b.turnoverCount - a.turnoverCount)[0] || null;
+    const topRevenueTable = tableList[0] || null;
+
+    return {
+      totalRevenueOverall,
+      totalTurnoverCount,
+      avgDurationMsOverall,
+      tableList,
+      topTurnoverTable,
+      topRevenueTable,
+    };
   };
 
   // Calculate Daily Recap for Archive Transactions
@@ -517,6 +624,18 @@ export default function CashierDashboard() {
       fetchArchive();
     }
   }, [activeTab, archiveDate, currentUser]);
+
+  useEffect(() => {
+    if (!statsDate) {
+      setStatsDate(getLocalDateString());
+    }
+  }, [statsDate]);
+
+  useEffect(() => {
+    if (activeTab === 'stats' && currentUser) {
+      fetchStats();
+    }
+  }, [activeTab, statsDate, currentUser]);
 
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
@@ -1015,6 +1134,13 @@ export default function CashierDashboard() {
             <RefreshCcw size={18} style={{ marginRight: '8px' }} /> Arsip Transaksi
           </button>
         )}
+        
+        <button
+          className={`btn ${activeTab === 'stats' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setActiveTab('stats')}
+        >
+          <BarChart3 size={18} style={{ marginRight: '8px' }} /> Statistik Meja
+        </button>
         
         <button
           className={`btn ${activeTab === 'menu' ? 'btn-primary' : 'btn-outline'}`}
@@ -1742,6 +1868,234 @@ export default function CashierDashboard() {
           )}
         </div>
       )}
+
+      {/* TAB STATISTIK MEJA & PERPUTARAN */}
+      {activeTab === 'stats' && (() => {
+        const stats = calculateTableStats();
+        const formattedDateStr = statsDate 
+          ? new Date(statsDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : statsDate;
+
+        return (
+          <div>
+            {/* Top Control Bar */}
+            <div className="flex justify-between items-center mb-6 flex-wrap gap-4" style={{ background: 'var(--card-bg)', padding: '1rem 1.25rem', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <BarChart3 size={24} style={{ color: 'var(--primary-color)' }} />
+                  Statistik Perputaran Meja & Revenue
+                </h2>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', opacity: 0.7 }}>
+                  Analisis perputaran meja (table turnover), rata-rata durasi penggunaan, dan pendapatan per meja.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.03)', padding: '0.35rem 0.75rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  <Calendar size={16} style={{ opacity: 0.6 }} />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Filter Tanggal:</span>
+                  <input
+                    type="date"
+                    className="input"
+                    value={statsDate}
+                    onChange={(e) => setStatsDate(e.target.value)}
+                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem', borderRadius: '8px' }}
+                  />
+                </div>
+
+                <button 
+                  className="btn btn-outline" 
+                  onClick={fetchStats}
+                  style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem' }}
+                >
+                  <RefreshCcw size={16} style={{ marginRight: '6px' }} /> Refresh Data
+                </button>
+              </div>
+            </div>
+
+            {loadingStats ? (
+              <p style={{ fontStyle: 'italic', opacity: 0.8 }}>Memuat data statistik meja...</p>
+            ) : (
+              <div>
+                {/* 4 Summary Stat Cards */}
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  {/* Total Revenue */}
+                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 700 }}>Revenue Keseluruhan</span>
+                      <div style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#2563eb', padding: '6px', borderRadius: '10px' }}>
+                        <TrendingUp size={18} />
+                      </div>
+                    </div>
+                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#1d4ed8' }}>
+                      Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
+                    </h3>
+                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                      {formattedDateStr}
+                    </p>
+                  </div>
+
+                  {/* Total Turnover */}
+                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 700 }}>Total Perputaran Meja</span>
+                      <div style={{ background: 'rgba(5, 150, 105, 0.15)', color: '#059669', padding: '6px', borderRadius: '10px' }}>
+                        <RefreshCcw size={18} />
+                      </div>
+                    </div>
+                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#047857' }}>
+                      {stats.totalTurnoverCount} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>kali</span>
+                    </h3>
+                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                      Total meja terpakai & selesai
+                    </p>
+                  </div>
+
+                  {/* Average Table Duration */}
+                  <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 700 }}>Avg Durasi Meja</span>
+                      <div style={{ background: 'rgba(217, 119, 6, 0.15)', color: '#d97706', padding: '6px', borderRadius: '10px' }}>
+                        <Timer size={18} />
+                      </div>
+                    </div>
+                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#b45309' }}>
+                      {formatDuration(stats.avgDurationMsOverall)}
+                    </h3>
+                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                      Rata-rata waktu open -> selesai
+                    </p>
+                  </div>
+
+                  {/* Top Performer Table */}
+                  <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#7c3aed', fontWeight: 700 }}>Meja Revenue Terbanyak</span>
+                      <div style={{ background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', padding: '6px', borderRadius: '10px' }}>
+                        <Award size={18} />
+                      </div>
+                    </div>
+                    <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#6d28d9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {stats.topRevenueTable ? stats.topRevenueTable.label : '-'}
+                    </h3>
+                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#6d28d9' }}>
+                      {stats.topRevenueTable ? `Rp ${stats.topRevenueTable.totalRevenue.toLocaleString('id-ID')}` : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Table Breakdown Details */}
+                <div className="glass-card p-5" style={{ borderRadius: '16px', background: 'var(--card-bg)', border: '1px solid var(--border-color)' }}>
+                  <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Utensils size={18} style={{ color: 'var(--primary-color)' }} />
+                      Rincian Performa & Perputaran Per Meja
+                    </h3>
+                    <span style={{ fontSize: '0.82rem', opacity: 0.7 }}>
+                      Menampilkan {stats.tableList.length} nomor meja / lokasi
+                    </span>
+                  </div>
+
+                  {stats.tableList.length > 0 ? (
+                    <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                            <th style={{ padding: '0.85rem 1rem', width: '50px' }}>No</th>
+                            <th style={{ padding: '0.85rem 1rem' }}>Nomor Meja</th>
+                            <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Jumlah Perputaran (Turnover)</th>
+                            <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Rata-Rata Durasi Terisi</th>
+                            <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue Meja</th>
+                            <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stats.tableList.map((item, idx) => (
+                            <tr key={item.tableKey} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                              <td style={{ padding: '0.8rem 1rem', fontWeight: 600, opacity: 0.6 }}>{idx + 1}</td>
+                              <td style={{ padding: '0.8rem 1rem' }}>
+                                <span style={{
+                                  background: item.isTakeAway ? '#f59e0b' : 'var(--primary-color)',
+                                  color: 'white',
+                                  padding: '0.3rem 0.7rem',
+                                  borderRadius: '8px',
+                                  fontWeight: 800,
+                                  fontSize: '0.85rem',
+                                  display: 'inline-block'
+                                }}>
+                                  {item.label}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
+                                <span style={{
+                                  background: 'rgba(16, 185, 129, 0.12)',
+                                  color: '#059669',
+                                  padding: '0.3rem 0.75rem',
+                                  borderRadius: '14px',
+                                  fontWeight: 800,
+                                  fontSize: '0.88rem'
+                                }}>
+                                  {item.turnoverCount}x selesai
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.8rem 1rem', textAlign: 'center', fontWeight: 600 }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
+                                  <Clock size={14} style={{ color: '#d97706' }} />
+                                  {formatDuration(item.avgDurationMs)}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--primary-color)', fontSize: '0.95rem' }}>
+                                Rp {item.totalRevenue.toLocaleString('id-ID')}
+                              </td>
+                              <td style={{ padding: '0.8rem 1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
+                                    <span>{item.revenueSharePercent.toFixed(1)}%</span>
+                                  </div>
+                                  <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{
+                                      width: `${Math.min(100, Math.max(0, item.revenueSharePercent))}%`,
+                                      height: '100%',
+                                      background: item.isTakeAway ? '#f59e0b' : 'var(--primary-color)',
+                                      borderRadius: '4px',
+                                      transition: 'width 0.3s ease'
+                                    }} />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                            <td colSpan={2} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN</td>
+                            <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
+                              {stats.totalTurnoverCount} Perputaran
+                            </td>
+                            <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#d97706', fontSize: '0.95rem' }}>
+                              Avg: {formatDuration(stats.avgDurationMsOverall)}
+                            </td>
+                            <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
+                              Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
+                            </td>
+                            <td style={{ padding: '0.9rem 1rem', fontWeight: 800, color: '#2563eb' }}>
+                              100%
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ) : (
+                    <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
+                      Belum ada transaksi selesai pada tanggal {statsDate}.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* TAB 2: KELOLA MENU & FOTO */}
       {activeTab === 'menu' && (
