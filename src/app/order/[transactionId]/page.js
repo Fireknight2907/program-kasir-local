@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, use } from 'react';
-import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils, Search, X, ShoppingBag, Clock } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils, Search, X, ShoppingBag, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 
 export default function OrderPage({ params }) {
   const { transactionId } = use(params);
@@ -17,6 +17,7 @@ export default function OrderPage({ params }) {
   const [activeCategory, setActiveCategory] = useState('');
   const [showCartModal, setShowCartModal] = useState(false);
   const [isTakeaway, setIsTakeaway] = useState(false);
+  const [showExistingOrders, setShowExistingOrders] = useState(false);
 
   const [categoriesList, setCategoriesList] = useState([]);
 
@@ -122,6 +123,45 @@ export default function OrderPage({ params }) {
     }
   };
 
+  const getAggregatedOrderedItems = () => {
+    if (!transaction || !transaction.orders || !Array.isArray(transaction.orders)) {
+      return { ordersList: [], totalItemCount: 0, totalAmount: 0 };
+    }
+    
+    let totalItemCount = 0;
+    let totalAmount = 0;
+    const ordersList = [];
+
+    transaction.orders.forEach((order, idx) => {
+      if (order.items && Array.isArray(order.items)) {
+        const items = order.items.map(item => {
+          const qty = Number(item.quantity) || 0;
+          const prc = Number(item.price) || 0;
+          const tot = qty * prc;
+          totalItemCount += qty;
+          totalAmount += tot;
+          return {
+            id: item.id,
+            name: item.menuItem?.name || 'Item Tidak Dikenal',
+            quantity: qty,
+            price: prc,
+            totalPrice: tot
+          };
+        });
+
+        ordersList.push({
+          orderId: order.id,
+          orderNumber: idx + 1,
+          createdAt: order.createdAt,
+          isTakeaway: order.isTakeaway,
+          items
+        });
+      }
+    });
+
+    return { ordersList, totalItemCount, totalAmount };
+  };
+
   const submitOrder = async () => {
     if (Object.keys(cart).length === 0) return;
 
@@ -140,6 +180,15 @@ export default function OrderPage({ params }) {
       });
 
       if (res.ok) {
+        try {
+          const trxRes = await fetch(`/api/transaction/${transactionId}`);
+          if (trxRes.ok) {
+            const trxData = await trxRes.json();
+            setTransaction(trxData);
+          }
+        } catch (e) {
+          console.error(e);
+        }
         setOrdered(true);
         setShowCartModal(false);
       } else {
@@ -167,72 +216,137 @@ export default function OrderPage({ params }) {
   );
 
   if (ordered) {
+    const { ordersList, totalItemCount, totalAmount } = getAggregatedOrderedItems();
+    const grandTotal = transaction?.total || totalAmount;
+
     return (
-      <div className="container text-center mt-4 p-4">
-        <div className="glass-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
-          <CheckCircle size={64} className="mx-auto mb-4" style={{ margin: '0 auto', display: 'block', color: '#10b981' }} />
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Pesanan Berhasil Terkirim!</h2>
-          <p className="mt-2 mb-4" style={{ fontSize: '1rem', opacity: 0.8 }}>
-            Terima kasih! Pesanan Anda telah masuk ke dapur dan sedang disiapkan.
+      <div className="container text-center mt-4 p-4 mb-8">
+        <div className="glass-card" style={{ maxWidth: '650px', margin: '0 auto', padding: '2rem 1.5rem', textAlign: 'center', borderRadius: '20px' }}>
+          <CheckCircle size={64} className="mx-auto mb-3" style={{ margin: '0 auto', display: 'block', color: '#10b981' }} />
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Pesanan Berhasil Terkirim!</h2>
+          <p className="mt-1 mb-4" style={{ fontSize: '0.95rem', opacity: 0.8 }}>
+            Terima kasih! Pesanan Anda telah diterima dan sedang disiapkan di dapur.
           </p>
+
+          {/* Header Info Box */}
           <div style={{
-            background: 'rgba(0,0,0,0.04)',
+            background: 'rgba(0,0,0,0.03)',
             padding: '1.25rem',
             borderRadius: '16px',
-            marginBottom: '1.5rem',
-            textAlign: 'center'
+            marginBottom: '1.25rem',
+            textAlign: 'center',
+            border: '1px solid var(--border-color)'
           }}>
-            <p style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.9rem' }}>Detail Pesanan:</p>
-            <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary-color)' }}>
-              Nomor Meja: {transaction?.tableNumber || transactionId.split('-')[1] || '-'}
+            <p style={{ fontWeight: 600, marginBottom: '0.2rem', fontSize: '0.85rem', opacity: 0.7 }}>Detail Lokasi & Transaksi:</p>
+            <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary-color)' }}>
+              {transaction?.tableNumber?.toLowerCase().includes('take away') ? transaction.tableNumber : `Meja: ${transaction?.tableNumber || transactionId.split('-')[1] || '-'}`}
             </p>
-            <p style={{ margin: '0.4rem 0 0.8rem 0', fontSize: '0.8rem', opacity: 0.7 }}>ID: <code>{transactionId}</code></p>
             
             <div style={{
               fontSize: '0.82rem',
-              background: 'rgba(255,255,255,0.7)',
-              padding: '0.55rem 0.75rem',
+              background: 'rgba(255,255,255,0.8)',
+              padding: '0.6rem 0.8rem',
               borderRadius: '12px',
               border: '1px solid rgba(0,0,0,0.06)',
               display: 'flex',
               flexDirection: 'column',
               gap: '6px',
-              textAlign: 'left'
+              textAlign: 'left',
+              marginTop: '0.75rem'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
-                <span><strong>Order Dibuat:</strong> {transaction?.createdAt ? new Date(transaction.createdAt).toLocaleString('id-ID') : '-'}</span>
+                <span><strong>Waktu Order:</strong> {transaction?.createdAt ? new Date(transaction.createdAt).toLocaleString('id-ID') : '-'}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <CheckCircle size={14} style={{ color: transaction?.completedAt || transaction?.status === 'completed' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
                 <span>
-                  <strong>Order Selesai:</strong> {
-                    transaction?.completedAt
-                      ? new Date(transaction.completedAt).toLocaleString('id-ID')
-                      : transaction?.status === 'completed'
-                        ? new Date(transaction.createdAt).toLocaleString('id-ID')
-                        : <span style={{ opacity: 0.7, fontStyle: 'italic' }}>Sedang Diproses (Belum Selesai)</span>
+                  <strong>Status Pesanan:</strong> {
+                    transaction?.status === 'completed'
+                      ? 'Selesai & Lunas'
+                      : <span style={{ color: '#d97706', fontWeight: 700 }}>Sedang Diproses Dapur</span>
                   }
                 </span>
               </div>
             </div>
+          </div>
 
-            <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-              <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Mohon tunggu di meja Anda.</p>
-              <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.8 }}>Pembayaran dilakukan di meja kasir setelah selesai.</p>
-            </div>
+          {/* Rincian Menu Yang Sudah Dipesan */}
+          <div style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '16px',
+            padding: '1.25rem',
+            textAlign: 'left',
+            marginBottom: '1.5rem',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+          }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+              <Utensils size={20} style={{ color: 'var(--primary-color)' }} />
+              Daftar Menu Yang Dipesan ({totalItemCount} Item)
+            </h3>
+
+            {ordersList.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {ordersList.map((ord, oIdx) => (
+                  <div key={ord.orderId || oIdx} style={{ background: 'rgba(0,0,0,0.02)', padding: '0.85rem 1rem', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-color)' }}>
+                        Pesanan #{ord.orderNumber}
+                      </span>
+                      {ord.isTakeaway && (
+                        <span style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
+                          Take Away (Bungkus)
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      {ord.items.map(item => (
+                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ background: 'var(--primary-color)', color: 'white', padding: '2px 7px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800 }}>
+                              {item.quantity}x
+                            </span>
+                            <span style={{ fontWeight: 600 }}>{item.name}</span>
+                          </div>
+                          <span style={{ fontWeight: 700, opacity: 0.9 }}>
+                            Rp {item.totalPrice.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Grand Total */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.75rem', borderTop: '2px dashed var(--border-color)', marginTop: '0.5rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>Total Tagihan:</span>
+                  <span style={{ fontWeight: 900, fontSize: '1.3rem', color: 'var(--primary-color)' }}>
+                    Rp {grandTotal.toLocaleString('id-ID')}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0 }}>Belum ada rincian item pesanan.</p>
+            )}
+          </div>
+
+          <div style={{ marginBottom: '1.5rem', background: 'rgba(59, 130, 246, 0.08)', padding: '0.85rem 1rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: '#1d4ed8' }}>
+              Silakan tunggu di meja Anda. Pembayaran dilakukan di kasir setelah selesai.
+            </p>
           </div>
           
           <button 
             className="btn btn-outline" 
-            style={{ padding: '0.75rem 1.75rem', fontWeight: 600, borderRadius: '12px' }}
+            style={{ padding: '0.75rem 1.75rem', fontWeight: 700, borderRadius: '14px', width: '100%', fontSize: '0.95rem' }}
             onClick={() => {
               setOrdered(false);
               setCart({});
             }}
           >
             <Plus size={18} style={{ display: 'inline', marginRight: '8px' }} />
-            Pesan Lagi (Tambahan)
+            Pesan Menu Tambahan
           </button>
         </div>
       </div>
@@ -312,6 +426,66 @@ export default function OrderPage({ params }) {
           />
         </div>
       </div>
+
+      {/* Banner / Summary Pesanan Yang Sudah Dipesan Sebelumnya */}
+      {(() => {
+        const { ordersList, totalItemCount, totalAmount } = getAggregatedOrderedItems();
+        if (totalItemCount === 0) return null;
+        return (
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.08)',
+            borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
+            padding: '0.65rem 1rem'
+          }}>
+            <div
+              onClick={() => setShowExistingOrders(!showExistingOrders)}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle size={16} style={{ color: '#2563eb' }} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1d4ed8' }}>
+                  Sudah Dipesan: {totalItemCount} item (Rp {totalAmount.toLocaleString('id-ID')})
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#2563eb', fontWeight: 600 }}>
+                <span>{showExistingOrders ? 'Sembunyikan' : 'Lihat Rincian'}</span>
+                {showExistingOrders ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </div>
+            </div>
+
+            {showExistingOrders && (
+              <div style={{
+                marginTop: '0.65rem',
+                paddingTop: '0.65rem',
+                borderTop: '1px solid rgba(59, 130, 246, 0.15)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+                fontSize: '0.85rem'
+              }}>
+                {ordersList.map((ord, idx) => (
+                  <div key={ord.orderId || idx} style={{ background: 'rgba(255,255,255,0.7)', padding: '0.5rem 0.75rem', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.7, marginBottom: '2px' }}>
+                      Pesanan #{ord.orderNumber} {ord.isTakeaway ? '(Take Away)' : ''}
+                    </div>
+                    {ord.items.map(item => (
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem' }}>
+                        <span>{item.quantity}x {item.name}</span>
+                        <span style={{ fontWeight: 600 }}>Rp {item.totalPrice.toLocaleString('id-ID')}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 2-Column Body Layout */}
       <div style={{ flex: 1, display: 'flex', position: 'relative' }}>

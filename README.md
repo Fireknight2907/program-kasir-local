@@ -7,7 +7,7 @@ https://program-kasir-local-bice.vercel.app/
 - tambah fitur edit urutan dan hapus kategori menu✅
 - buat fitur take away bisa langsung di pesan dan tidak usah membuat QR lagi untuk karyawan dan admin✅
 - buat tampilan daftar transaksi sama semua dan hanya ketika ordernnya banyak yang bisa di scroll✅
-- tampilan customer menampilkan apa dan berapa banyak menu yang sudah di pesan
+- tampilan customer menampilkan apa dan berapa banyak menu yang sudah di pesan✅
 - buat urutan dari pesanan paling terakhir sampai terbaru dari atas ke bawah✅
 - ngecek scroll menu apakah ada error
 - saat karyawan akan close order maka ada pilihan pembayarannya lewat apa agar lebih terstruktur✅
@@ -16,7 +16,7 @@ https://program-kasir-local-bice.vercel.app/
 - tambah fitur data untuk mengetahui berapa banyak perputaran dari satu meja✅
 - owner dashboard ( masih dipertimbangkan)
 - buat fitur untuk menambah akun admin
-- buat fitur untuk melihat selisih cost production dan juga harga jual dalam persen dan jga nominal
+- buat fitur untuk melihat selisih cost production dan juga harga jual dalam persen dan juga nominal
 -  tambah data average revenue per meja
 - tambah data menu yang paling laku dan tidak laku dan juga nominalnnya
 - tambah fitur untuk melihat diakhir shift/hari jam/shift paling ramai
@@ -43,6 +43,8 @@ ubah menu kelola kategori menu agar bisa digeser keatas dan kebawah
 fitur take away langsung tidak perlu qrcode lagi
 tambah menu statistik meja
 tambah fitur waktu open dan close order
+tambah fitur payment method setelah kelar makan
+tambah data turnover meja
 
 
 
