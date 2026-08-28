@@ -140,7 +140,7 @@ export default function CashierDashboard() {
 
     const dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
     const dateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-    
+
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     const seconds = String(d.getSeconds()).padStart(2, '0');
@@ -164,7 +164,7 @@ export default function CashierDashboard() {
     setLoadingTransactions(true);
     try {
       const today = getLocalDateString();
-      const res = await fetch(`/api/transaction?date=${today}&tab=active`, { 
+      const res = await fetch(`/api/transaction?date=${today}&tab=active`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
       });
@@ -225,6 +225,7 @@ export default function CashierDashboard() {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return minutes > 0 ? `${hours} j ${minutes} mnt` : `${hours} j`;
+  };
   // Calculate Table & Item Statistics
   const calculateTableStats = () => {
     const validTrxs = statsTransactions.filter(trx => trx.status === 'completed');
@@ -557,7 +558,7 @@ export default function CashierDashboard() {
       const recap = calculateDailyRecap();
       const XLSX = await import('xlsx');
 
-      const formattedDateStr = archiveDate 
+      const formattedDateStr = archiveDate
         ? new Date(archiveDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
         : archiveDate;
 
@@ -1113,7 +1114,7 @@ export default function CashierDashboard() {
   const handleChangeTableNumber = async (id, currentNumber) => {
     const newTable = prompt('Masukkan nomor meja / nama pelanggan baru:', currentNumber);
     if (!newTable || newTable.trim() === '' || newTable === currentNumber) return;
-    
+
     try {
       const res = await fetch(`/api/transaction/${id}`, {
         method: 'PUT',
@@ -1408,24 +1409,24 @@ export default function CashierDashboard() {
           <p>Kelola pesanan transaksi & daftar menu makanan/minuman</p>
         </div>
         <div style={{ position: 'relative' }}>
-          <button 
-            className="btn btn-outline flex items-center" 
+          <button
+            className="btn btn-outline flex items-center"
             style={{ gap: '8px', padding: '0.5rem 1rem' }}
             onClick={() => setShowProfileMenu(!showProfileMenu)}
           >
-            <User size={18} /> 
+            <User size={18} />
             <span style={{ fontWeight: 600 }}>{currentUser?.name || currentUser?.username || 'Akun'}</span>
             <ChevronDown size={16} />
           </button>
-          
+
           {showProfileMenu && (
             <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: '0.5rem', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', width: '220px', zIndex: 50, padding: '0.5rem' }}>
               <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem' }}>
                 <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem' }}>{currentUser?.name || currentUser?.username}</p>
                 <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>Role: {currentUser?.role || 'KASIR'}</p>
               </div>
-              <button 
-                className="btn" 
+              <button
+                className="btn"
                 style={{ width: '100%', textAlign: 'left', background: 'transparent', color: 'var(--text-color)', padding: '0.5rem', display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}
                 onClick={() => {
                   setShowProfileMenu(false);
@@ -1436,8 +1437,8 @@ export default function CashierDashboard() {
               >
                 <Key size={16} style={{ marginRight: '8px' }} /> Ganti Password
               </button>
-              <button 
-                className="btn" 
+              <button
+                className="btn"
                 style={{ width: '100%', textAlign: 'left', background: 'transparent', color: '#ef4444', padding: '0.5rem', display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}
                 onClick={handleLogout}
               >
@@ -1456,7 +1457,7 @@ export default function CashierDashboard() {
         >
           <Receipt size={18} style={{ marginRight: '8px' }} /> Transaksi Hari Ini
         </button>
-        
+
         {currentUser?.role === 'ADMIN' && (
           <button
             className={`btn ${activeTab === 'archive' ? 'btn-primary' : 'btn-outline'}`}
@@ -1465,14 +1466,14 @@ export default function CashierDashboard() {
             <RefreshCcw size={18} style={{ marginRight: '8px' }} /> Arsip Transaksi
           </button>
         )}
-        
+
         <button
           className={`btn ${activeTab === 'stats' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setActiveTab('stats')}
         >
           <BarChart3 size={18} style={{ marginRight: '8px' }} /> Statistik Meja
         </button>
-        
+
         <button
           className={`btn ${activeTab === 'menu' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setActiveTab('menu')}
@@ -1510,9 +1511,9 @@ export default function CashierDashboard() {
               <button className="btn btn-outline" onClick={fetchTransactions}>
                 <RefreshCcw size={18} style={{ marginRight: '8px' }} /> Refresh
               </button>
-              <button 
-                className="btn" 
-                style={{ background: '#f59e0b', color: 'white', borderColor: '#f59e0b' }} 
+              <button
+                className="btn"
+                style={{ background: '#f59e0b', color: 'white', borderColor: '#f59e0b' }}
                 onClick={openDirectTakeawayModal}
               >
                 <ShoppingBag size={18} style={{ marginRight: '8px' }} /> Pesan Take Away Direct
@@ -1545,11 +1546,11 @@ export default function CashierDashboard() {
                 <p style={{ margin: '0.3rem 0 0.6rem 0', fontSize: '0.85rem', opacity: 0.85 }}>
                   Scan QR Code di bawah untuk melihat menu & melakukan pemesanan makanan/minuman.
                 </p>
-                
+
                 <div className="qr-container my-1 p-2.5" style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'inline-block' }}>
                   <QRCodeSVG value={activeQr.url} size={190} />
                 </div>
-                
+
                 {/* Information Badge for Hari, Tanggal, Jam saat QR dibuat */}
                 <div className="qr-time-info mt-2 mb-2 p-2.5" style={{
                   background: 'rgba(99, 102, 241, 0.08)',
@@ -1612,172 +1613,172 @@ export default function CashierDashboard() {
                   return timeB - timeA;
                 })
                 .map(trx => (
-                <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
-                  <div>
-                    <div className="flex justify-between items-start mb-2 gap-2">
-                      <span style={{
-                        background: 'var(--primary-color)',
-                        color: 'white',
-                        padding: '0.25rem 0.65rem',
-                        borderRadius: '8px',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {trx.tableNumber?.toLowerCase().includes('take away') ? trx.tableNumber : `MEJA ${trx.tableNumber || '-'}`}
-                        <button 
-                          onClick={() => handleChangeTableNumber(trx.id, trx.tableNumber)}
-                          style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex' }}
-                          title="Ganti Nomor Meja"
-                        >
-                          <Edit3 size={12} />
-                        </button>
-                      </span>
-                      <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`} style={{ textAlign: 'right' }}>
-                        {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
-                      </span>
-                    </div>
-                    <div style={{ marginBottom: '0.85rem' }}>
-                      <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '0.82rem', opacity: 0.7, wordBreak: 'break-all' }}>ID: {trx.id.substring(0, 20)}...</h3>
-                      <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
-                          <span><strong>Order Dibuat:</strong> {trx.createdAt ? new Date(trx.createdAt).toLocaleString('id-ID') : '-'}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle size={14} style={{ color: trx.completedAt || trx.status === 'completed' ? '#10b981' : '#9ca3af', flexShrink: 0 }} />
-                          <span>
-                            <strong>Order Selesai:</strong> {
-                              trx.completedAt 
-                                ? new Date(trx.completedAt).toLocaleString('id-ID') 
-                                : trx.status === 'completed' 
-                                  ? new Date(trx.createdAt).toLocaleString('id-ID') 
-                                  : <span style={{ opacity: 0.65, fontStyle: 'italic' }}>Belum Selesai</span>
-                            }
-                          </span>
-                        </div>
-                        {trx.paymentMethod && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                            <span style={{
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              padding: '0.15rem 0.5rem',
-                              borderRadius: '6px',
-                              background: trx.paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.12)' : trx.paymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(139, 92, 246, 0.12)',
-                              color: trx.paymentMethod === 'CASH' ? '#059669' : trx.paymentMethod === 'QRIS' ? '#2563eb' : '#7c3aed',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}>
-                              {trx.paymentMethod === 'CASH' ? <Banknote size={13} /> : trx.paymentMethod === 'QRIS' ? <Smartphone size={13} /> : <CreditCard size={13} />}
-                              Bayar: {trx.paymentMethod === 'CASH' ? 'Cash / Tunai' : trx.paymentMethod === 'QRIS' ? 'QRIS' : 'Kartu Debit/Kredit'}
+                  <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
+                    <div>
+                      <div className="flex justify-between items-start mb-2 gap-2">
+                        <span style={{
+                          background: 'var(--primary-color)',
+                          color: 'white',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '8px',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {trx.tableNumber?.toLowerCase().includes('take away') ? trx.tableNumber : `MEJA ${trx.tableNumber || '-'}`}
+                          <button
+                            onClick={() => handleChangeTableNumber(trx.id, trx.tableNumber)}
+                            style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex' }}
+                            title="Ganti Nomor Meja"
+                          >
+                            <Edit3 size={12} />
+                          </button>
+                        </span>
+                        <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`} style={{ textAlign: 'right' }}>
+                          {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
+                        </span>
+                      </div>
+                      <div style={{ marginBottom: '0.85rem' }}>
+                        <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '0.82rem', opacity: 0.7, wordBreak: 'break-all' }}>ID: {trx.id.substring(0, 20)}...</h3>
+                        <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                            <span><strong>Order Dibuat:</strong> {trx.createdAt ? new Date(trx.createdAt).toLocaleString('id-ID') : '-'}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <CheckCircle size={14} style={{ color: trx.completedAt || trx.status === 'completed' ? '#10b981' : '#9ca3af', flexShrink: 0 }} />
+                            <span>
+                              <strong>Order Selesai:</strong> {
+                                trx.completedAt
+                                  ? new Date(trx.completedAt).toLocaleString('id-ID')
+                                  : trx.status === 'completed'
+                                    ? new Date(trx.createdAt).toLocaleString('id-ID')
+                                    : <span style={{ opacity: 0.65, fontStyle: 'italic' }}>Belum Selesai</span>
+                              }
                             </span>
                           </div>
+                          {trx.paymentMethod && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '6px',
+                                background: trx.paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.12)' : trx.paymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                                color: trx.paymentMethod === 'CASH' ? '#059669' : trx.paymentMethod === 'QRIS' ? '#2563eb' : '#7c3aed',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                {trx.paymentMethod === 'CASH' ? <Banknote size={13} /> : trx.paymentMethod === 'QRIS' ? <Smartphone size={13} /> : <CreditCard size={13} />}
+                                Bayar: {trx.paymentMethod === 'CASH' ? 'Cash / Tunai' : trx.paymentMethod === 'QRIS' ? 'QRIS' : 'Kartu Debit/Kredit'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {trx.orders && trx.orders.length > 0 ? (
+                        <div className="mt-4">
+                          <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                          <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
+                            <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
+                              {trx.orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
+                                <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                                  {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
+                                  {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
+                                  <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                    {order.items.map(item => (
+                                      <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                        {item.quantity}x {item.menuItem?.name || 'Item'}
+                                        <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4">
+                          <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                          <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(0,0,0,0.02)' }}>
+                            <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Belum ada pesanan.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 'auto', paddingTop: '0.5rem' }}>
+                      {trx.orders && trx.orders.length > 0 && (
+                        <div className="flex justify-between items-center mb-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
+                          <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
+                          <span className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>
+                            Rp {trx.total.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      )}
+                      {trx.status === 'ordered' && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => openPaymentModal(trx)}
+                          style={{ width: '100%', marginBottom: '0.75rem' }}
+                        >
+                          <Check size={18} style={{ marginRight: '8px' }} /> Tandai Selesai (Sudah Dibayar)
+                        </button>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        {trx.status !== 'completed' && trx.status !== 'cancelled' && (
+                          <>
+                            <button
+                              className="btn btn-outline"
+                              onClick={() => showQRForTransaction(trx)}
+                              style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
+                              title="Tampilkan ulang QR Code"
+                            >
+                              <QrCode size={16} /> QR
+                            </button>
+                            <button
+                              className="btn btn-outline"
+                              onClick={() => openEditOrderModal(trx)}
+                              style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
+                            >
+                              <Edit3 size={16} style={{ marginRight: '4px' }} /> Edit
+                            </button>
+                            <button
+                              className="btn btn-danger"
+                              onClick={() => cancelTransaction(trx.id)}
+                              style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
+                            >
+                              <X size={16} style={{ marginRight: '4px' }} /> Batalkan
+                            </button>
+                          </>
+                        )}
+                        {currentUser?.role === 'ADMIN' && (
+                          <button
+                            className="btn btn-danger"
+                            onClick={() => deleteTransaction(trx.id)}
+                            style={{
+                              fontSize: '0.85rem',
+                              padding: '0.4rem',
+                              width: '100%',
+                              background: 'transparent',
+                              color: '#ef4444',
+                              border: '1px solid #ef4444',
+                              gridColumn: (trx.status === 'completed' || trx.status === 'cancelled') ? 'span 2' : 'span 1'
+                            }}
+                          >
+                            <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
+                          </button>
                         )}
                       </div>
                     </div>
-
-                    {trx.orders && trx.orders.length > 0 ? (
-                      <div className="mt-4">
-                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
-                        <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
-                          <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
-                            {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
-                              <div key={order.id} style={{ marginBottom: '0.5rem' }}>
-                                {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
-                                {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
-                                <ul style={{ paddingLeft: '1rem', margin: 0 }}>
-                                  {order.items.map(item => (
-                                    <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-                                      {item.quantity}x {item.menuItem?.name || 'Item'}
-                                      <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-4">
-                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
-                        <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(0,0,0,0.02)' }}>
-                          <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Belum ada pesanan.</p>
-                        </div>
-                      </div>
-                    )}
                   </div>
-
-                  <div style={{ marginTop: 'auto', paddingTop: '0.5rem' }}>
-                    {trx.orders && trx.orders.length > 0 && (
-                      <div className="flex justify-between items-center mb-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
-                        <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
-                        <span className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>
-                          Rp {trx.total.toLocaleString('id-ID')}
-                        </span>
-                      </div>
-                    )}
-                    {trx.status === 'ordered' && (
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => openPaymentModal(trx)}
-                        style={{ width: '100%', marginBottom: '0.75rem' }}
-                      >
-                        <Check size={18} style={{ marginRight: '8px' }} /> Tandai Selesai (Sudah Dibayar)
-                      </button>
-                    )}
-                    <div className="grid grid-cols-2 gap-2">
-                    {trx.status !== 'completed' && trx.status !== 'cancelled' && (
-                      <>
-                        <button
-                          className="btn btn-outline"
-                          onClick={() => showQRForTransaction(trx)}
-                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
-                          title="Tampilkan ulang QR Code"
-                        >
-                          <QrCode size={16} /> QR
-                        </button>
-                        <button
-                          className="btn btn-outline"
-                          onClick={() => openEditOrderModal(trx)}
-                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
-                        >
-                          <Edit3 size={16} style={{ marginRight: '4px' }} /> Edit
-                        </button>
-                        <button
-                          className="btn btn-danger"
-                          onClick={() => cancelTransaction(trx.id)}
-                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
-                        >
-                          <X size={16} style={{ marginRight: '4px' }} /> Batalkan
-                        </button>
-                      </>
-                    )}
-                    {currentUser?.role === 'ADMIN' && (
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => deleteTransaction(trx.id)}
-                        style={{ 
-                          fontSize: '0.85rem', 
-                          padding: '0.4rem', 
-                          width: '100%', 
-                          background: 'transparent', 
-                          color: '#ef4444', 
-                          border: '1px solid #ef4444',
-                          gridColumn: (trx.status === 'completed' || trx.status === 'cancelled') ? 'span 2' : 'span 1'
-                        }}
-                      >
-                        <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
-                      </button>
-                    )}
-                  </div>
-                </div>
-                </div>
-              ))}
+                ))}
               {transactions.length === 0 && !loadingTransactions && (
                 <p>Belum ada transaksi hari ini.</p>
               )}
@@ -1913,7 +1914,7 @@ export default function CashierDashboard() {
                   {/* Right Column: Selected Items Cart Summary */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                     <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', fontWeight: 800 }}>Ringkasan Pesanan Take Away</h4>
-                    
+
                     <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem', paddingRight: '0.25rem', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '0.5rem', background: 'rgba(0,0,0,0.02)' }}>
                       {Object.values(takeawayCart).length === 0 ? (
                         <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontStyle: 'italic', opacity: 0.6, fontSize: '0.85rem' }}>
@@ -2288,7 +2289,7 @@ export default function CashierDashboard() {
                               </button>
                             )}
                           </div>
-                      ))}
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -2309,9 +2310,9 @@ export default function CashierDashboard() {
           <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
             <h2>Arsip Transaksi</h2>
             <div className="flex items-center gap-4">
-              <input 
-                type="date" 
-                className="input" 
+              <input
+                type="date"
+                className="input"
                 style={{ width: 'auto' }}
                 value={archiveDate}
                 onChange={(e) => setArchiveDate(e.target.value)}
@@ -2344,8 +2345,8 @@ export default function CashierDashboard() {
                         </div>
                       </div>
                       <div className="flex gap-2 items-center flex-wrap">
-                        <button 
-                          className="btn btn-outline flex items-center gap-2" 
+                        <button
+                          className="btn btn-outline flex items-center gap-2"
                           onClick={exportToExcel}
                           style={{ background: '#10b981', color: 'white', borderColor: '#10b981', fontSize: '0.85rem', padding: '0.4rem 0.85rem', cursor: 'pointer' }}
                         >
@@ -2510,122 +2511,122 @@ export default function CashierDashboard() {
                     return timeB - timeA;
                   })
                   .map(trx => (
-                <div key={trx.id} className="glass-card flex flex-col justify-between" style={{ opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
-                  <div>
-                    <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span style={{
-                          background: 'var(--primary-color)',
-                          color: 'white',
-                          padding: '0.25rem 0.65rem',
-                          borderRadius: '8px',
-                          fontWeight: 700,
-                          fontSize: '0.85rem'
-                        }}>
-                          MEJA {trx.tableNumber || '-'}
-                        </span>
-                        <h3 style={{ margin: 0, fontSize: '0.95rem' }}>ID: {trx.id.substring(0, 16)}...</h3>
-                      </div>
-                      <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`}>
-                        {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.85rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
-                        <span><strong>Order Dibuat:</strong> {trx.createdAt ? new Date(trx.createdAt).toLocaleString('id-ID') : '-'}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CheckCircle size={14} style={{ color: trx.completedAt || trx.status === 'completed' ? '#10b981' : '#9ca3af', flexShrink: 0 }} />
-                        <span>
-                          <strong>Order Selesai:</strong> {
-                            trx.completedAt 
-                              ? new Date(trx.completedAt).toLocaleString('id-ID') 
-                              : trx.status === 'completed' 
-                                ? new Date(trx.createdAt).toLocaleString('id-ID') 
-                                : <span style={{ opacity: 0.65, fontStyle: 'italic' }}>Belum Selesai</span>
-                          }
-                        </span>
-                      </div>
-                      {trx.paymentMethod && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                          <span style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: '6px',
-                            background: trx.paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.12)' : trx.paymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(139, 92, 246, 0.12)',
-                            color: trx.paymentMethod === 'CASH' ? '#059669' : trx.paymentMethod === 'QRIS' ? '#2563eb' : '#7c3aed',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}>
-                            {trx.paymentMethod === 'CASH' ? <Banknote size={13} /> : trx.paymentMethod === 'QRIS' ? <Smartphone size={13} /> : <CreditCard size={13} />}
-                            Bayar: {trx.paymentMethod === 'CASH' ? 'Cash / Tunai' : trx.paymentMethod === 'QRIS' ? 'QRIS' : 'Kartu Debit/Kredit'}
+                    <div key={trx.id} className="glass-card flex flex-col justify-between" style={{ opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
+                      <div>
+                        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span style={{
+                              background: 'var(--primary-color)',
+                              color: 'white',
+                              padding: '0.25rem 0.65rem',
+                              borderRadius: '8px',
+                              fontWeight: 700,
+                              fontSize: '0.85rem'
+                            }}>
+                              MEJA {trx.tableNumber || '-'}
+                            </span>
+                            <h3 style={{ margin: 0, fontSize: '0.95rem' }}>ID: {trx.id.substring(0, 16)}...</h3>
+                          </div>
+                          <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`}>
+                            {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
                           </span>
                         </div>
-                      )}
-                    </div>
+                        <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.85rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Clock size={14} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                            <span><strong>Order Dibuat:</strong> {trx.createdAt ? new Date(trx.createdAt).toLocaleString('id-ID') : '-'}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <CheckCircle size={14} style={{ color: trx.completedAt || trx.status === 'completed' ? '#10b981' : '#9ca3af', flexShrink: 0 }} />
+                            <span>
+                              <strong>Order Selesai:</strong> {
+                                trx.completedAt
+                                  ? new Date(trx.completedAt).toLocaleString('id-ID')
+                                  : trx.status === 'completed'
+                                    ? new Date(trx.createdAt).toLocaleString('id-ID')
+                                    : <span style={{ opacity: 0.65, fontStyle: 'italic' }}>Belum Selesai</span>
+                              }
+                            </span>
+                          </div>
+                          {trx.paymentMethod && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '6px',
+                                background: trx.paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.12)' : trx.paymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                                color: trx.paymentMethod === 'CASH' ? '#059669' : trx.paymentMethod === 'QRIS' ? '#2563eb' : '#7c3aed',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                {trx.paymentMethod === 'CASH' ? <Banknote size={13} /> : trx.paymentMethod === 'QRIS' ? <Smartphone size={13} /> : <CreditCard size={13} />}
+                                Bayar: {trx.paymentMethod === 'CASH' ? 'Cash / Tunai' : trx.paymentMethod === 'QRIS' ? 'QRIS' : 'Kartu Debit/Kredit'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
 
-                    {trx.orders && trx.orders.length > 0 ? (
-                      <div className="mt-4">
-                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
-                        <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
-                          <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
-                            {trx.orders.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
-                              <div key={order.id} style={{ marginBottom: '0.5rem' }}>
-                                {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{display:'inline', marginRight: '2px'}}/> Pesanan Tambahan</p>}
-                                <ul style={{ paddingLeft: '1rem', margin: 0 }}>
-                                  {order.items.map(item => (
-                                    <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-                                      {item.quantity}x {item.menuItem?.name || 'Item'}
-                                      <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ))}
-                          </ul>
-                        </div>
-                        <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
-                          <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
-                          <span className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>
-                            Rp {trx.total.toLocaleString('id-ID')}
-                          </span>
-                        </div>
+                        {trx.orders && trx.orders.length > 0 ? (
+                          <div className="mt-4">
+                            <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                            <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
+                              <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
+                                {trx.orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
+                                  <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                                    {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
+                                    <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                      {order.items.map(item => (
+                                        <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                          {item.quantity}x {item.menuItem?.name || 'Item'}
+                                          <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
+                              <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Total:</span>
+                              <span className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>
+                                Rp {trx.total.toLocaleString('id-ID')}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-4">
+                            <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
+                            <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(0,0,0,0.02)' }}>
+                              <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Belum ada pesanan.</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="mt-4">
-                        <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
-                        <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1rem', background: 'rgba(0,0,0,0.02)' }}>
-                          <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Belum ada pesanan.</p>
-                        </div>
-                      </div>
-                    )}
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-auto pt-4">
-                      <button
-                        className="btn btn-outline"
-                        onClick={() => openEditOrderModal(trx)}
-                        style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
-                      >
-                        <Edit3 size={16} style={{ marginRight: '4px' }} /> Edit
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => deleteTransaction(trx.id)}
-                        style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
-                      >
-                        <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
-                      </button>
+                      <div className="grid grid-cols-2 gap-2 mt-auto pt-4">
+                        <button
+                          className="btn btn-outline"
+                          onClick={() => openEditOrderModal(trx)}
+                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
+                        >
+                          <Edit3 size={16} style={{ marginRight: '4px' }} /> Edit
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => deleteTransaction(trx.id)}
+                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
+                        >
+                          <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
+                        </button>
+                      </div>
                     </div>
-                  </div>
-              ))}
-              {archiveTransactions.length === 0 && !loadingArchive && (
-                <p>Tidak ada transaksi pada tanggal {archiveDate}.</p>
-              )}
-            </div>
+                  ))}
+                {archiveTransactions.length === 0 && !loadingArchive && (
+                  <p>Tidak ada transaksi pada tanggal {archiveDate}.</p>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -2634,7 +2635,7 @@ export default function CashierDashboard() {
       {/* TAB STATISTIK MEJA, ORDER & PERPUTARAN */}
       {activeTab === 'stats' && (() => {
         const stats = calculateTableStats();
-        const formattedDateStr = statsDate 
+        const formattedDateStr = statsDate
           ? new Date(statsDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
           : statsDate;
 
@@ -2685,8 +2686,8 @@ export default function CashierDashboard() {
                   />
                 </div>
 
-                <button 
-                  className="btn btn-outline" 
+                <button
+                  className="btn btn-outline"
                   onClick={fetchStats}
                   style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem' }}
                 >
@@ -3586,9 +3587,9 @@ export default function CashierDashboard() {
                             <Trash2 size={16} />
                           </button>
                         </div>
-                        <button 
-                          className={`btn ${item.isAvailable ? 'btn-outline' : 'btn-primary'}`} 
-                          style={{ padding: '0.4rem', width: '100%', borderColor: item.isAvailable ? '#ef4444' : '', color: item.isAvailable ? '#ef4444' : '' }} 
+                        <button
+                          className={`btn ${item.isAvailable ? 'btn-outline' : 'btn-primary'}`}
+                          style={{ padding: '0.4rem', width: '100%', borderColor: item.isAvailable ? '#ef4444' : '', color: item.isAvailable ? '#ef4444' : '' }}
                           onClick={() => handleToggleAvailability(item)}
                         >
                           <X size={16} style={{ marginRight: '6px' }} /> {item.isAvailable ? 'Close Order (Stok Habis)' : 'Buka Order (Tersedia)'}
@@ -3678,8 +3679,8 @@ export default function CashierDashboard() {
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>
                           Kategori
                         </label>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                           onClick={() => setShowCategoryModal(true)}
                         >
@@ -3747,7 +3748,7 @@ export default function CashierDashboard() {
                           <ImageIcon size={36} className="text-primary mb-2" style={{ opacity: 0.6 }} />
                           <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Pilih File Foto PNG</p>
                           <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.6, marginBottom: '1rem' }}>Hanya mendukung format file .png</p>
-                          
+
                           <label className="btn btn-primary" style={{ cursor: 'pointer', padding: '0.5rem 1.2rem', fontSize: '0.9rem' }}>
                             <Upload size={16} style={{ marginRight: '6px' }} />
                             {uploadingImage ? 'Mengunggah...' : 'Pilih Gambar PNG'}
@@ -3853,29 +3854,29 @@ export default function CashierDashboard() {
                 <form onSubmit={handleSaveEmployee} className="flex flex-col gap-3">
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Nama Lengkap *</label>
-                    <input type="text" className="input" value={employeeFormData.name} onChange={(e) => setEmployeeFormData({...employeeFormData, name: e.target.value})} required />
+                    <input type="text" className="input" value={employeeFormData.name} onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })} required />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Username Login *</label>
-                    <input type="text" className="input" placeholder="contoh: budi_kasir" value={employeeFormData.username} onChange={(e) => setEmployeeFormData({...employeeFormData, username: e.target.value.toLowerCase()})} required />
+                    <input type="text" className="input" placeholder="contoh: budi_kasir" value={employeeFormData.username} onChange={(e) => setEmployeeFormData({ ...employeeFormData, username: e.target.value.toLowerCase() })} required />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Password {editingEmployeeId ? '(Kosongkan jika tidak ingin diubah)' : 'Awal (Default: kasir123)'}</label>
-                    <input type="text" className="input" placeholder={editingEmployeeId ? "Kosongkan jika tetap" : "kasir123"} value={employeeFormData.password} onChange={(e) => setEmployeeFormData({...employeeFormData, password: e.target.value})} />
+                    <input type="text" className="input" placeholder={editingEmployeeId ? "Kosongkan jika tetap" : "kasir123"} value={employeeFormData.password} onChange={(e) => setEmployeeFormData({ ...employeeFormData, password: e.target.value })} />
                   </div>
                   <div className="grid grid-cols-2" style={{ gap: '1rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Tempat, Tanggal Lahir</label>
-                      <input type="text" className="input" placeholder="Jakarta, 12 Mei 1998" value={employeeFormData.ttl} onChange={(e) => setEmployeeFormData({...employeeFormData, ttl: e.target.value})} />
+                      <input type="text" className="input" placeholder="Jakarta, 12 Mei 1998" value={employeeFormData.ttl} onChange={(e) => setEmployeeFormData({ ...employeeFormData, ttl: e.target.value })} />
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>No Handphone</label>
-                      <input type="text" className="input" placeholder="0812..." value={employeeFormData.phone} onChange={(e) => setEmployeeFormData({...employeeFormData, phone: e.target.value})} />
+                      <input type="text" className="input" placeholder="0812..." value={employeeFormData.phone} onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })} />
                     </div>
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Alamat Lengkap</label>
-                    <textarea className="input" rows={2} value={employeeFormData.address} onChange={(e) => setEmployeeFormData({...employeeFormData, address: e.target.value})} />
+                    <textarea className="input" rows={2} value={employeeFormData.address} onChange={(e) => setEmployeeFormData({ ...employeeFormData, address: e.target.value })} />
                   </div>
                   <div className="flex gap-4 justify-between mt-2">
                     <button type="button" className="btn btn-outline" style={{ width: '40%' }} onClick={() => setShowEmployeeModal(false)}>Batal</button>
@@ -3900,15 +3901,15 @@ export default function CashierDashboard() {
             <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Password Lama *</label>
-                <input type="password" className="input" value={passwordForm.oldPassword} onChange={(e) => setPasswordForm({...passwordForm, oldPassword: e.target.value})} required />
+                <input type="password" className="input" value={passwordForm.oldPassword} onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })} required />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Password Baru *</label>
-                <input type="password" className="input" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})} required />
+                <input type="password" className="input" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} required />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Konfirmasi Password Baru *</label>
-                <input type="password" className="input" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} required />
+                <input type="password" className="input" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} required />
               </div>
               <button type="submit" className="btn btn-primary mt-2">Simpan Password Baru</button>
             </form>
@@ -3989,17 +3990,17 @@ export default function CashierDashboard() {
             </form>
 
             {/* List Categories with Drag & Drop */}
-            <div 
+            <div
               ref={categoryListRef}
-              className="custom-scrollbar" 
+              className="custom-scrollbar"
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              style={{ 
-                maxHeight: '380px', 
-                overflowY: 'auto', 
-                border: '1px solid var(--border-color)', 
-                borderRadius: '10px', 
-                padding: '0.5rem', 
+              style={{
+                maxHeight: '380px',
+                overflowY: 'auto',
+                border: '1px solid var(--border-color)',
+                borderRadius: '10px',
+                padding: '0.5rem',
                 background: 'rgba(0,0,0,0.02)',
                 userSelect: 'none'
               }}
@@ -4077,4 +4078,4 @@ export default function CashierDashboard() {
     </div>
   );
 }
-}
+
