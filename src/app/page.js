@@ -1386,14 +1386,17 @@ export default function CashierDashboard() {
     });
   }
 
-  const filteredMenu = menuList.filter(item =>
-    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
-    (item.category && item.category.toLowerCase().includes(menuSearch.toLowerCase()))
-  ).sort((a, b) => {
-    const orderA = categoryOrderMap[a.category || 'Umum'] !== undefined ? categoryOrderMap[a.category || 'Umum'] : 999;
-    const orderB = categoryOrderMap[b.category || 'Umum'] !== undefined ? categoryOrderMap[b.category || 'Umum'] : 999;
+  const filteredMenu = (Array.isArray(menuList) ? menuList : []).filter(item => {
+    if (!item) return false;
+    const name = item.name || '';
+    const category = item.category || '';
+    const search = (menuSearch || '').toLowerCase();
+    return name.toLowerCase().includes(search) || category.toLowerCase().includes(search);
+  }).sort((a, b) => {
+    const orderA = categoryOrderMap[a?.category || 'Umum'] !== undefined ? categoryOrderMap[a?.category || 'Umum'] : 999;
+    const orderB = categoryOrderMap[b?.category || 'Umum'] !== undefined ? categoryOrderMap[b?.category || 'Umum'] : 999;
     if (orderA !== orderB) return orderA - orderB;
-    return a.name.localeCompare(b.name);
+    return (a?.name || '').localeCompare(b?.name || '');
   });
 
   return (
@@ -2635,22 +2638,24 @@ export default function CashierDashboard() {
           ? new Date(statsDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
           : statsDate;
 
-        // Filter and Sort for Menu Items (Sub-Tab 2)
-        const categoriesInStats = Array.from(new Set(stats.itemList.map(i => i.category))).filter(Boolean);
-        const filteredStatsItems = stats.itemList
+        const categoriesInStats = Array.from(new Set((stats.itemList || []).map(i => i?.category))).filter(Boolean);
+        const filteredStatsItems = (stats.itemList || [])
           .filter(item => {
-            const matchesSearch = item.name.toLowerCase().includes(statsItemSearch.toLowerCase()) ||
-                                  item.category.toLowerCase().includes(statsItemSearch.toLowerCase());
-            const matchesCategory = statsItemCategory === 'ALL' || item.category === statsItemCategory;
+            if (!item) return false;
+            const name = item.name || '';
+            const category = item.category || '';
+            const search = (statsItemSearch || '').toLowerCase();
+            const matchesSearch = name.toLowerCase().includes(search) || category.toLowerCase().includes(search);
+            const matchesCategory = statsItemCategory === 'ALL' || category === statsItemCategory;
             return matchesSearch && matchesCategory;
           })
           .sort((a, b) => {
             if (statsItemSort === 'asc') {
               // Paling Tidak Laku -> Paling Laku
-              return a.quantity - b.quantity || a.totalRevenue - b.totalRevenue;
+              return (a.quantity || 0) - (b.quantity || 0) || (a.totalRevenue || 0) - (b.totalRevenue || 0);
             }
             // Paling Laku -> Paling Tidak Laku
-            return b.quantity - a.quantity || b.totalRevenue - a.totalRevenue;
+            return (b.quantity || 0) - (a.quantity || 0) || (b.totalRevenue || 0) - (a.totalRevenue || 0);
           });
 
         return (
