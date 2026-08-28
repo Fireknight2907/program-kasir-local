@@ -57,11 +57,12 @@ export default function CashierDashboard() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('CASH');
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
-  // Statistics sub-tab state ('tables' | 'items')
+  // Statistics sub-tab state ('tables' | 'items' | 'hourly')
   const [statsSubTab, setStatsSubTab] = useState('tables');
   const [statsItemSearch, setStatsItemSearch] = useState('');
   const [statsItemCategory, setStatsItemCategory] = useState('ALL');
   const [statsItemSort, setStatsItemSort] = useState('desc'); // 'desc': Paling Laku -> Tidak Laku, 'asc': Paling Tidak Laku -> Laku
+  const [selectedHourFilter, setSelectedHourFilter] = useState('ALL');
 
   // Menu management state
   const [menuList, setMenuList] = useState([]);
@@ -224,8 +225,6 @@ export default function CashierDashboard() {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return minutes > 0 ? `${hours} j ${minutes} mnt` : `${hours} j`;
-  };
-
   // Calculate Table & Item Statistics
   const calculateTableStats = () => {
     const validTrxs = statsTransactions.filter(trx => trx.status === 'completed');
@@ -263,6 +262,22 @@ export default function CashierDashboard() {
       CARD: { count: 0, revenue: 0 },
       UNSPECIFIED: { count: 0, revenue: 0 }
     };
+
+    // Hourly Stats calculation (00:00 - 23:00)
+    const hourlyMap = {};
+    for (let h = 0; h < 24; h++) {
+      hourlyMap[h] = {
+        hour: h,
+        label: `${String(h).padStart(2, '0')}:00 - ${String(h + 1).padStart(2, '0')}:00`,
+        shortLabel: `Jam ${String(h).padStart(2, '0')}:00`,
+        orderCount: 0,
+        totalItemsQuantity: 0,
+        totalRevenue: 0,
+        tableSet: new Set(),
+        itemsMap: {},
+        tablesMap: {},
+      };
+    }
 
     validTrxs.forEach(trx => {
       const rev = Number(trx.total) || 0;
@@ -321,6 +336,24 @@ export default function CashierDashboard() {
             additionalOrdersCount += 1;
           }
 
+          const orderDate = order.createdAt ? new Date(order.createdAt) : (trx.createdAt ? new Date(trx.createdAt) : null);
+          const h = orderDate && !isNaN(orderDate.getTime()) ? orderDate.getHours() : 0;
+
+          hourlyMap[h].orderCount += 1;
+          hourlyMap[h].tableSet.add(tableLabel);
+
+          if (!hourlyMap[h].tablesMap[rawTable]) {
+            hourlyMap[h].tablesMap[rawTable] = {
+              tableKey: rawTable,
+              label: tableLabel,
+              isTakeAway,
+              orderCount: 0,
+              totalItemsQuantity: 0,
+              totalRevenue: 0,
+            };
+          }
+          hourlyMap[h].tablesMap[rawTable].orderCount += 1;
+
           if (order.items && Array.isArray(order.items)) {
             const itemsInThisOrder = new Set();
 
@@ -351,6 +384,26 @@ export default function CashierDashboard() {
                 itemMap[name].image = image;
               }
               itemsInThisOrder.add(name);
+
+              // Track hourly stats items
+              hourlyMap[h].totalItemsQuantity += qty;
+              hourlyMap[h].totalRevenue += itemTotal;
+
+              hourlyMap[h].tablesMap[rawTable].totalItemsQuantity += qty;
+              hourlyMap[h].tablesMap[rawTable].totalRevenue += itemTotal;
+
+              if (!hourlyMap[h].itemsMap[name]) {
+                hourlyMap[h].itemsMap[name] = {
+                  name,
+                  category,
+                  quantity: 0,
+                  totalRevenue: 0,
+                  unitPrice: price,
+                  image,
+                };
+              }
+              hourlyMap[h].itemsMap[name].quantity += qty;
+              hourlyMap[h].itemsMap[name].totalRevenue += itemTotal;
             });
 
             itemsInThisOrder.forEach(itemName => {
@@ -398,6 +451,16 @@ export default function CashierDashboard() {
     const mostSoldItem = itemsWithSales.length > 0 ? itemsWithSales[0] : null;
     const leastSoldItem = sortedMostToLeast.length > 0 ? sortedMostToLeast[sortedMostToLeast.length - 1] : null;
 
+    const hourlyList = Object.values(hourlyMap).map(h => ({
+      ...h,
+      tablesCount: h.tableSet.size,
+      tableList: Object.values(h.tablesMap),
+      itemList: Object.values(h.itemsMap).sort((a, b) => b.quantity - a.quantity),
+    }));
+
+    const activeHoursList = hourlyList.filter(h => h.orderCount > 0);
+    const peakHour = activeHoursList.length > 0 ? [...activeHoursList].sort((a, b) => b.orderCount - a.orderCount || b.totalItemsQuantity - a.totalItemsQuantity)[0] : null;
+
     return {
       totalRevenueOverall,
       totalTurnoverCount,
@@ -417,6 +480,9 @@ export default function CashierDashboard() {
       itemList: sortedMostToLeast,
       mostSoldItem,
       leastSoldItem,
+      hourlyList,
+      activeHoursList,
+      peakHour,
     };
   };
 
@@ -2804,6 +2870,26 @@ export default function CashierDashboard() {
                         <BarChart3 size={18} />
                         Urutan Pesanan (Paling Laku s/d Tidak Laku) ({stats.itemList.length})
                       </button>
+                      <button
+                        onClick={() => setStatsSubTab('hourly')}
+                        style={{
+                          background: statsSubTab === 'hourly' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
+                          color: statsSubTab === 'hourly' ? 'white' : 'var(--text-color)',
+                          border: 'none',
+                          padding: '0.55rem 1.1rem',
+                          borderRadius: '12px',
+                          fontWeight: 700,
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Clock size={18} />
+                        Analisis Jam Sibuk & Per Jam ({stats.activeHoursList.length} Jam Aktif)
+                      </button>
                     </div>
 
                     {statsSubTab === 'tables' && (
@@ -2925,7 +3011,7 @@ export default function CashierDashboard() {
                         Belum ada transaksi selesai pada tanggal {statsDate}.
                       </p>
                     )
-                  ) : (
+                  ) : statsSubTab === 'items' ? (
                     /* Sub-Tab 2: Menu Item Sales & Ranking (Most Sold to Least Sold) */
                     <div>
                       {/* Filter & Sort Controls */}
@@ -3119,6 +3205,283 @@ export default function CashierDashboard() {
                           Tidak ada menu yang sesuai dengan pencarian / filter "{statsItemSearch}".
                         </p>
                       )}
+                    </div>
+                  ) : (
+                    /* Sub-Tab 3: Hourly Peak & Activity Analysis */
+                    <div>
+                      {/* Peak Hour Summary Card Banner */}
+                      {stats.peakHour && (
+                        <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '12px', padding: '0.85rem 1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ background: '#f59e0b', color: 'white', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Flame size={22} />
+                            </div>
+                            <div>
+                              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#b45309' }}>
+                                Jam Paling Sibuk Hari Ini: {stats.peakHour.label} (Jam {stats.peakHour.hour} Siang/Malam)
+                              </h4>
+                              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#92400e', fontWeight: 600 }}>
+                                Menerima <strong>{stats.peakHour.orderCount} Order Tiket</strong> • <strong>{stats.peakHour.totalItemsQuantity} Porsi Menu Dipesan</strong> • <strong>{stats.peakHour.tablesCount} Meja Dipakai</strong> (Total Revenue: Rp {stats.peakHour.totalRevenue.toLocaleString('id-ID')})
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => setSelectedHourFilter(stats.peakHour.hour)}
+                            style={{ fontSize: '0.82rem', padding: '0.35rem 0.75rem', background: 'white', border: '1px solid #f59e0b', color: '#b45309', fontWeight: 700 }}
+                          >
+                            Lihat Jam Paling Sibuk Ini
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Hourly Filter Selector */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'center', flexWrap: 'wrap', background: 'rgba(0,0,0,0.02)', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        <Clock size={18} style={{ opacity: 0.6 }} />
+                        <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Pilih Filter Jam:</span>
+                        <select
+                          className="input"
+                          value={selectedHourFilter}
+                          onChange={(e) => setSelectedHourFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+                          style={{ padding: '0.4rem 0.85rem', fontSize: '0.88rem', borderRadius: '8px', minWidth: '240px', fontWeight: 600 }}
+                        >
+                          <option value="ALL">Semua Jam Oprik ({stats.activeHoursList.length} Jam dengan Transaksi)</option>
+                          {stats.hourlyList.map(h => (
+                            <option key={h.hour} value={h.hour}>
+                              {h.label} {h.orderCount > 0 ? `(${h.orderCount} Order, ${h.totalItemsQuantity} Porsi, ${h.tablesCount} Meja)` : '(Tidak Ada Transaksi)'}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedHourFilter !== 'ALL' && (
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => setSelectedHourFilter('ALL')}
+                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.7rem' }}
+                          >
+                            Reset Filter Jam
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Main Table for Hourly Activity Breakdown */}
+                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                              <th style={{ padding: '0.85rem 1rem', width: '60px' }}>Jam</th>
+                              <th style={{ padding: '0.85rem 1rem' }}>Rentang Waktu</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Order Diterima</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Menu Dipesan (Porsi)</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Meja Dipakai</th>
+                              <th style={{ padding: '0.85rem 1rem' }}>Daftar Meja Aktif</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Revenue Per Jam</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center', width: '130px' }}>Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(selectedHourFilter === 'ALL' ? stats.hourlyList.filter(h => h.orderCount > 0) : stats.hourlyList.filter(h => h.hour === selectedHourFilter)).map((h) => {
+                              const isPeak = stats.peakHour && stats.peakHour.hour === h.hour;
+                              const isSelected = selectedHourFilter === h.hour;
+
+                              return (
+                                <tr key={h.hour} style={{ borderBottom: '1px solid var(--border-color)', background: isSelected ? 'rgba(59, 130, 246, 0.08)' : isPeak ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }}>
+                                  <td style={{ padding: '0.85rem 1rem', fontWeight: 800, fontSize: '0.95rem' }}>
+                                    {String(h.hour).padStart(2, '0')}:00
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span>{h.label}</span>
+                                      {isPeak && (
+                                        <span style={{ fontSize: '0.72rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '6px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                          <Flame size={12} /> Jam Paling Sibuk
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                    <span style={{ background: 'rgba(14, 165, 233, 0.12)', color: '#0284c7', padding: '0.3rem 0.75rem', borderRadius: '14px', fontWeight: 800, fontSize: '0.88rem' }}>
+                                      {h.orderCount} Order Tiket
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                    <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', padding: '0.3rem 0.75rem', borderRadius: '14px', fontWeight: 800, fontSize: '0.88rem' }}>
+                                      {h.totalItemsQuantity} Porsi Menu
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                    <span style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed', padding: '0.3rem 0.75rem', borderRadius: '14px', fontWeight: 800, fontSize: '0.88rem' }}>
+                                      {h.tablesCount} Meja Dipakai
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem' }}>
+                                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                      {h.tableList.map(t => (
+                                        <span key={t.tableKey} style={{ background: t.isTakeAway ? '#f59e0b' : 'var(--primary-color)', color: 'white', padding: '2px 6px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                          {t.label} ({t.orderCount}o, {t.totalItemsQuantity}p)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--primary-color)', fontSize: '0.95rem' }}>
+                                    Rp {h.totalRevenue.toLocaleString('id-ID')}
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                    <button
+                                      className="btn btn-outline"
+                                      onClick={() => setSelectedHourFilter(h.hour)}
+                                      style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem', borderRadius: '8px' }}
+                                    >
+                                      Detail Jam
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {stats.activeHoursList.length === 0 && (
+                              <tr>
+                                <td colSpan={8} style={{ padding: '1.5rem', textAlign: 'center', fontStyle: 'italic', opacity: 0.7 }}>
+                                  Belum ada transaksi / order pada tanggal {statsDate}.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                              <td colSpan={2} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN (24 JAM)</td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#0284c7', fontSize: '1rem' }}>
+                                {stats.totalOrdersReceived} Order
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
+                                {stats.itemList.reduce((sum, i) => sum + i.quantity, 0)} Porsi
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#7c3aed', fontSize: '1rem' }}>
+                                {stats.distinctTablesUsed} Meja Fisik
+                              </td>
+                              <td></td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
+                                Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+
+                      {/* Drilldown Detailed View for Selected Hour */}
+                      {selectedHourFilter !== 'ALL' && (() => {
+                        const targetHourData = stats.hourlyList.find(h => h.hour === selectedHourFilter);
+                        if (!targetHourData) return null;
+
+                        return (
+                          <div style={{ background: 'rgba(59, 130, 246, 0.04)', border: '2px solid rgba(59, 130, 246, 0.2)', borderRadius: '16px', padding: '1.25rem', marginTop: '1.5rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                              <div>
+                                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <Clock size={20} />
+                                  Rincian Detail Transaksi Pada: {targetHourData.label} (Jam {targetHourData.hour} Siang/Malam)
+                                </h3>
+                                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.82rem', opacity: 0.8 }}>
+                                  Menerima <strong>{targetHourData.orderCount} Order Tiket</strong>, <strong>{targetHourData.totalItemsQuantity} Porsi Menu Dipesan</strong>, dan <strong>{targetHourData.tablesCount} Meja Beraktivitas</strong> (Total Omset Jam Ini: Rp {targetHourData.totalRevenue.toLocaleString('id-ID')}).
+                                </p>
+                              </div>
+                              <button
+                                className="btn btn-outline"
+                                onClick={() => setSelectedHourFilter('ALL')}
+                                style={{ fontSize: '0.82rem', padding: '0.35rem 0.75rem' }}
+                              >
+                                <X size={14} style={{ marginRight: '4px' }} /> Tutup Detail Jam
+                              </button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+                              {/* Panel 1: Menu Items Ordered in this hour */}
+                              <div style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 800, color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Utensils size={16} /> Daftar Menu & Porsi Dipesan (Jam {targetHourData.hour}:00)
+                                </h4>
+                                {targetHourData.itemList.length > 0 ? (
+                                  <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                      <thead>
+                                        <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                                          <th style={{ padding: '0.5rem 0.75rem' }}>Nama Menu</th>
+                                          <th style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>Jumlah Porsi</th>
+                                          <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>Total Omset</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {targetHourData.itemList.map((item, i) => (
+                                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                            <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>
+                                              {item.name}
+                                              <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, fontWeight: 400 }}>{item.category}</span>
+                                            </td>
+                                            <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>
+                                              <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', padding: '0.2rem 0.5rem', borderRadius: '10px', fontWeight: 800 }}>
+                                                {item.quantity}x porsi
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary-color)' }}>
+                                              Rp {item.totalRevenue.toLocaleString('id-ID')}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <p style={{ fontSize: '0.85rem', fontStyle: 'italic', opacity: 0.7 }}>Tidak ada menu dipesan pada jam ini.</p>
+                                )}
+                              </div>
+
+                              {/* Panel 2: Tables Active in this hour */}
+                              <div style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 800, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <ShoppingBag size={16} /> Meja Dipakai & Aktivitas Order (Jam {targetHourData.hour}:00)
+                                </h4>
+                                {targetHourData.tableList.length > 0 ? (
+                                  <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                      <thead>
+                                        <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                                          <th style={{ padding: '0.5rem 0.75rem' }}>Nomor Meja</th>
+                                          <th style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>Aktivitas Order</th>
+                                          <th style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>Total Porsi</th>
+                                          <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>Total Omset Meja</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {targetHourData.tableList.map((tbl, i) => (
+                                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                            <td style={{ padding: '0.5rem 0.75rem' }}>
+                                              <span style={{ background: tbl.isTakeAway ? '#f59e0b' : 'var(--primary-color)', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.78rem' }}>
+                                                {tbl.label}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>
+                                              <span style={{ background: 'rgba(14, 165, 233, 0.12)', color: '#0284c7', padding: '0.2rem 0.5rem', borderRadius: '10px', fontWeight: 800 }}>
+                                                {tbl.orderCount} Order
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', fontWeight: 700 }}>
+                                              {tbl.totalItemsQuantity} Porsi
+                                            </td>
+                                            <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary-color)' }}>
+                                              Rp {tbl.totalRevenue.toLocaleString('id-ID')}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <p style={{ fontSize: '0.85rem', fontStyle: 'italic', opacity: 0.7 }}>Tidak ada meja beraktivitas pada jam ini.</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -3708,4 +4071,5 @@ export default function CashierDashboard() {
       )}
     </div>
   );
+}
 }
