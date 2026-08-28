@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, RefreshCcw, Check, Printer, LogOut, Utensils,
-  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus, Banknote, Smartphone, CreditCard
+  Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus, Banknote, Smartphone, CreditCard, Flame, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Filter
 } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -59,6 +59,9 @@ export default function CashierDashboard() {
 
   // Statistics sub-tab state ('tables' | 'items')
   const [statsSubTab, setStatsSubTab] = useState('tables');
+  const [statsItemSearch, setStatsItemSearch] = useState('');
+  const [statsItemCategory, setStatsItemCategory] = useState('ALL');
+  const [statsItemSort, setStatsItemSort] = useState('desc'); // 'desc': Paling Laku -> Tidak Laku, 'asc': Paling Tidak Laku -> Laku
 
   // Menu management state
   const [menuList, setMenuList] = useState([]);
@@ -223,7 +226,7 @@ export default function CashierDashboard() {
     return minutes > 0 ? `${hours} j ${minutes} mnt` : `${hours} j`;
   };
 
-  // Calculate Table Statistics
+  // Calculate Table & Item Statistics
   const calculateTableStats = () => {
     const validTrxs = statsTransactions.filter(trx => trx.status === 'completed');
     let totalRevenueOverall = 0;
@@ -231,8 +234,28 @@ export default function CashierDashboard() {
     let totalDurationMsOverall = 0;
     let durationCountOverall = 0;
 
+    let totalOrdersReceived = 0;
+    let initialOrdersCount = 0;
+    let additionalOrdersCount = 0;
+
     const tableMap = {};
     const itemMap = {};
+
+    // Initialize itemMap with all items from menuList so unsold menu items (0 porsi) are included
+    if (menuList && Array.isArray(menuList)) {
+      menuList.forEach(m => {
+        itemMap[m.name] = {
+          id: m.id,
+          name: m.name,
+          category: m.category || 'Lainnya',
+          quantity: 0,
+          orderCount: 0,
+          totalRevenue: 0,
+          unitPrice: m.price,
+          image: m.image || null,
+        };
+      });
+    }
 
     const paymentMethods = {
       CASH: { count: 0, revenue: 0 },
@@ -267,6 +290,7 @@ export default function CashierDashboard() {
           totalRevenue: 0,
           totalDurationMs: 0,
           durationCount: 0,
+          totalOrdersCount: 0,
         };
       }
 
@@ -287,31 +311,65 @@ export default function CashierDashboard() {
       }
 
       if (trx.orders && Array.isArray(trx.orders)) {
-        trx.orders.forEach(order => {
+        totalOrdersReceived += trx.orders.length;
+        tableMap[rawTable].totalOrdersCount += trx.orders.length;
+
+        trx.orders.forEach((order, orderIdx) => {
+          if (orderIdx === 0) {
+            initialOrdersCount += 1;
+          } else {
+            additionalOrdersCount += 1;
+          }
+
           if (order.items && Array.isArray(order.items)) {
+            const itemsInThisOrder = new Set();
+
             order.items.forEach(item => {
               const name = item.menuItem?.name || 'Item Tidak Dikenal';
               const category = item.menuItem?.category || 'Lainnya';
               const qty = Number(item.quantity) || 0;
               const price = Number(item.price) || 0;
               const itemTotal = qty * price;
+              const image = item.menuItem?.image || null;
 
               if (!itemMap[name]) {
                 itemMap[name] = {
+                  id: item.menuItemId || name,
                   name,
                   category,
                   quantity: 0,
+                  orderCount: 0,
                   totalRevenue: 0,
                   unitPrice: price,
+                  image,
                 };
               }
+
               itemMap[name].quantity += qty;
               itemMap[name].totalRevenue += itemTotal;
+              if (image && !itemMap[name].image) {
+                itemMap[name].image = image;
+              }
+              itemsInThisOrder.add(name);
+            });
+
+            itemsInThisOrder.forEach(itemName => {
+              if (itemMap[itemName]) {
+                itemMap[itemName].orderCount += 1;
+              }
             });
           }
         });
       }
     });
+
+    const physicalTables = Object.values(tableMap).filter(t => !t.isTakeAway);
+    const takeawayTables = Object.values(tableMap).filter(t => t.isTakeAway);
+    const distinctTablesUsed = physicalTables.length;
+    const physicalTurnoverCount = physicalTables.reduce((sum, t) => sum + t.turnoverCount, 0);
+
+    const avgTurnoverPerTable = distinctTablesUsed > 0 ? (physicalTurnoverCount / distinctTablesUsed) : 0;
+    const avgOrdersPerTable = validTrxs.length > 0 ? (totalOrdersReceived / validTrxs.length) : 0;
 
     const avgDurationMsOverall = durationCountOverall > 0 ? (totalDurationMsOverall / durationCountOverall) : 0;
 
@@ -331,22 +389,32 @@ export default function CashierDashboard() {
         ...item,
         revenueSharePercent
       };
-    }).sort((a, b) => b.quantity - a.quantity || b.totalRevenue - a.totalRevenue);
+    });
 
-    const topTurnoverTable = [...tableList].sort((a, b) => b.turnoverCount - a.turnoverCount)[0] || null;
-    const topRevenueTable = tableList[0] || null;
-    const mostSoldItem = itemList.length > 0 ? itemList[0] : null;
-    const leastSoldItem = itemList.length > 0 ? itemList[itemList.length - 1] : null;
+    // Default sort: quantity desc then totalRevenue desc
+    const sortedMostToLeast = [...itemList].sort((a, b) => b.quantity - a.quantity || b.totalRevenue - a.totalRevenue);
+    const itemsWithSales = sortedMostToLeast.filter(i => i.quantity > 0);
+
+    const mostSoldItem = itemsWithSales.length > 0 ? itemsWithSales[0] : null;
+    const leastSoldItem = sortedMostToLeast.length > 0 ? sortedMostToLeast[sortedMostToLeast.length - 1] : null;
 
     return {
       totalRevenueOverall,
       totalTurnoverCount,
+      physicalTurnoverCount,
+      distinctTablesUsed,
+      takeawayCount: takeawayTables.reduce((sum, t) => sum + t.turnoverCount, 0),
+      avgTurnoverPerTable,
+      totalOrdersReceived,
+      initialOrdersCount,
+      additionalOrdersCount,
+      avgOrdersPerTable,
       avgDurationMsOverall,
       paymentMethods,
       tableList,
-      topTurnoverTable,
-      topRevenueTable,
-      itemList,
+      topTurnoverTable: [...tableList].sort((a, b) => b.turnoverCount - a.turnoverCount)[0] || null,
+      topRevenueTable: tableList[0] || null,
+      itemList: sortedMostToLeast,
       mostSoldItem,
       leastSoldItem,
     };
@@ -2494,12 +2562,30 @@ export default function CashierDashboard() {
         </div>
       )}
 
-      {/* TAB STATISTIK MEJA & PERPUTARAN */}
+      {/* TAB STATISTIK MEJA, ORDER & PERPUTARAN */}
       {activeTab === 'stats' && (() => {
         const stats = calculateTableStats();
         const formattedDateStr = statsDate 
           ? new Date(statsDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
           : statsDate;
+
+        // Filter and Sort for Menu Items (Sub-Tab 2)
+        const categoriesInStats = Array.from(new Set(stats.itemList.map(i => i.category))).filter(Boolean);
+        const filteredStatsItems = stats.itemList
+          .filter(item => {
+            const matchesSearch = item.name.toLowerCase().includes(statsItemSearch.toLowerCase()) ||
+                                  item.category.toLowerCase().includes(statsItemSearch.toLowerCase());
+            const matchesCategory = statsItemCategory === 'ALL' || item.category === statsItemCategory;
+            return matchesSearch && matchesCategory;
+          })
+          .sort((a, b) => {
+            if (statsItemSort === 'asc') {
+              // Paling Tidak Laku -> Paling Laku
+              return a.quantity - b.quantity || a.totalRevenue - b.totalRevenue;
+            }
+            // Paling Laku -> Paling Tidak Laku
+            return b.quantity - a.quantity || b.totalRevenue - a.totalRevenue;
+          });
 
         return (
           <div>
@@ -2508,10 +2594,10 @@ export default function CashierDashboard() {
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <BarChart3 size={24} style={{ color: 'var(--primary-color)' }} />
-                  Statistik Perputaran Meja & Revenue
+                  Statistik Meja, Order & Penjualan Menu
                 </h2>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', opacity: 0.7 }}>
-                  Analisis perputaran meja (table turnover), rata-rata durasi penggunaan, dan pendapatan per meja.
+                  Analisis perputaran meja (table turnover), jumlah order diterima, dan performa menu paling laku hingga tidak laku.
                 </p>
               </div>
 
@@ -2542,18 +2628,18 @@ export default function CashierDashboard() {
               <p style={{ fontStyle: 'italic', opacity: 0.8 }}>Memuat data statistik meja...</p>
             ) : (
               <div>
-                {/* 4 Cards per Row Square Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                {/* 7 Metric KPI Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   {/* Card 1: Total Revenue */}
-                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 700 }}>Revenue Keseluruhan</span>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 700 }}>Revenue Keseluruhan</span>
                       <div style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#2563eb', padding: '6px', borderRadius: '10px' }}>
                         <TrendingUp size={18} />
                       </div>
                     </div>
                     <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#1d4ed8' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#1d4ed8' }}>
                         Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
                       </h3>
                       <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
@@ -2562,110 +2648,112 @@ export default function CashierDashboard() {
                     </div>
                   </div>
 
-                  {/* Card 2: Total Turnover */}
-                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 700 }}>Total Perputaran Meja</span>
+                  {/* Card 2: Meja Dipakai & Perputaran */}
+                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>Meja Dipakai & Perputaran</span>
                       <div style={{ background: 'rgba(5, 150, 105, 0.15)', color: '#059669', padding: '6px', borderRadius: '10px' }}>
                         <RefreshCcw size={18} />
                       </div>
                     </div>
                     <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#047857' }}>
-                        {stats.totalTurnoverCount} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>kali</span>
+                      <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#047857' }}>
+                        {stats.distinctTablesUsed} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Meja Dipakai</span>
                       </h3>
-                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
-                        Total meja terpakai & selesai
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 600, color: '#047857' }}>
+                        {stats.physicalTurnoverCount}x total perputaran ({stats.avgTurnoverPerTable.toFixed(1)}x / meja)
                       </p>
                     </div>
                   </div>
 
-                  {/* Card 3: Average Table Duration */}
-                  <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 700 }}>Avg Durasi Meja</span>
+                  {/* Card 3: Total Order Diterima */}
+                  <div style={{ background: 'rgba(14, 165, 233, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(14, 165, 233, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#0284c7', fontWeight: 700 }}>Total Order Diterima</span>
+                      <div style={{ background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', padding: '6px', borderRadius: '10px' }}>
+                        <ShoppingBag size={18} />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#0369a1' }}>
+                        {stats.totalOrdersReceived} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Pesanan</span>
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 600, color: '#0369a1' }}>
+                        {stats.initialOrdersCount} Utama • {stats.additionalOrdersCount} Tambahan (Avg {stats.avgOrdersPerTable.toFixed(1)}/meja)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Average Table Duration */}
+                  <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#d97706', fontWeight: 700 }}>Avg Durasi Meja</span>
                       <div style={{ background: 'rgba(217, 119, 6, 0.15)', color: '#d97706', padding: '6px', borderRadius: '10px' }}>
                         <Timer size={18} />
                       </div>
                     </div>
                     <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#b45309' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#b45309' }}>
                         {formatDuration(stats.avgDurationMsOverall)}
                       </h3>
                       <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
-                        Rata-rata waktu open -> selesai
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Card 4: Top Revenue Table */}
-                  <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#7c3aed', fontWeight: 700 }}>Meja Revenue Terbanyak</span>
-                      <div style={{ background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', padding: '6px', borderRadius: '10px' }}>
-                        <Award size={18} />
-                      </div>
-                    </div>
-                    <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#6d28d9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {stats.topRevenueTable ? stats.topRevenueTable.label : '-'}
-                      </h3>
-                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#6d28d9' }}>
-                        {stats.topRevenueTable ? `Rp ${stats.topRevenueTable.totalRevenue.toLocaleString('id-ID')}` : '-'}
+                        Rata-rata waktu terisi -> selesai
                       </p>
                     </div>
                   </div>
 
                   {/* Card 5: Top Turnover Table */}
-                  <div style={{ background: 'rgba(236, 72, 153, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(236, 72, 153, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#db2777', fontWeight: 700 }}>Meja Paling Sering Terisi</span>
+                  <div style={{ background: 'rgba(236, 72, 153, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(236, 72, 153, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#db2777', fontWeight: 700 }}>Meja Paling Sering Diputar</span>
                       <div style={{ background: 'rgba(219, 39, 119, 0.15)', color: '#db2777', padding: '6px', borderRadius: '10px' }}>
                         <Utensils size={18} />
                       </div>
                     </div>
                     <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#be185d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#be185d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stats.topTurnoverTable ? stats.topTurnoverTable.label : '-'}
                       </h3>
                       <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#be185d' }}>
-                        {stats.topTurnoverTable ? `${stats.topTurnoverTable.turnoverCount}x diputar` : '-'}
+                        {stats.topTurnoverTable ? `${stats.topTurnoverTable.turnoverCount}x diputar (${stats.topTurnoverTable.totalOrdersCount} order)` : '-'}
                       </p>
                     </div>
                   </div>
 
                   {/* Card 6: Most Sold Menu Item */}
-                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 700 }}>Menu Paling Laku</span>
+                  <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Flame size={14} style={{ color: '#ef4444' }} /> Menu Paling Laku
+                      </span>
                       <div style={{ background: 'rgba(5, 150, 105, 0.15)', color: '#059669', padding: '6px', borderRadius: '10px' }}>
                         <TrendingUp size={18} />
                       </div>
                     </div>
                     <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 900, color: '#047857', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#047857', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stats.mostSoldItem ? stats.mostSoldItem.name : '-'}
                       </h3>
                       <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#047857' }}>
-                        {stats.mostSoldItem ? `${stats.mostSoldItem.quantity}x terjual (Rp ${stats.mostSoldItem.totalRevenue.toLocaleString('id-ID')})` : '-'}
+                        {stats.mostSoldItem ? `${stats.mostSoldItem.quantity}x porsi terjual (Rp ${stats.mostSoldItem.totalRevenue.toLocaleString('id-ID')})` : '-'}
                       </p>
                     </div>
                   </div>
 
                   {/* Card 7: Least Sold Menu Item */}
-                  <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '1.1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.2)', aspectRatio: '1.25/1', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 700 }}>Menu Paling Tidak Laku</span>
+                  <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#dc2626', fontWeight: 700 }}>Menu Paling Tidak Laku</span>
                       <div style={{ background: 'rgba(220, 38, 38, 0.15)', color: '#dc2626', padding: '6px', borderRadius: '10px' }}>
-                        <Utensils size={18} />
+                        <AlertTriangle size={18} />
                       </div>
                     </div>
                     <div>
-                      <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 900, color: '#b91c1c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#b91c1c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stats.leastSoldItem ? stats.leastSoldItem.name : '-'}
                       </h3>
                       <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c' }}>
-                        {stats.leastSoldItem ? `${stats.leastSoldItem.quantity}x terjual (Rp ${stats.leastSoldItem.totalRevenue.toLocaleString('id-ID')})` : '-'}
+                        {stats.leastSoldItem ? `${stats.leastSoldItem.quantity}x porsi terjual (Rp ${stats.leastSoldItem.totalRevenue.toLocaleString('id-ID')})` : '-'}
                       </p>
                     </div>
                   </div>
@@ -2674,47 +2762,55 @@ export default function CashierDashboard() {
                 {/* Table Breakdown Details with Sub-Tab Switcher */}
                 <div className="glass-card p-5" style={{ borderRadius: '16px', background: 'var(--card-bg)', border: '1px solid var(--border-color)' }}>
                   {/* Sub-Tab Navigation Buttons */}
-                  <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.85rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => setStatsSubTab('tables')}
-                      style={{
-                        background: statsSubTab === 'tables' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
-                        color: statsSubTab === 'tables' ? 'white' : 'var(--text-color)',
-                        border: 'none',
-                        padding: '0.55rem 1.1rem',
-                        borderRadius: '12px',
-                        fontWeight: 700,
-                        fontSize: '0.9rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <Utensils size={18} />
-                      Rincian Performa & Perputaran Per Meja ({stats.tableList.length})
-                    </button>
-                    <button
-                      onClick={() => setStatsSubTab('items')}
-                      style={{
-                        background: statsSubTab === 'items' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
-                        color: statsSubTab === 'items' ? 'white' : 'var(--text-color)',
-                        border: 'none',
-                        padding: '0.55rem 1.1rem',
-                        borderRadius: '12px',
-                        fontWeight: 700,
-                        fontSize: '0.9rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <BarChart3 size={18} />
-                      Penjualan & Kontribusi Menu Makanan ({stats.itemList.length})
-                    </button>
+                  <div style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.85rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setStatsSubTab('tables')}
+                        style={{
+                          background: statsSubTab === 'tables' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
+                          color: statsSubTab === 'tables' ? 'white' : 'var(--text-color)',
+                          border: 'none',
+                          padding: '0.55rem 1.1rem',
+                          borderRadius: '12px',
+                          fontWeight: 700,
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Utensils size={18} />
+                        Rincian Performa & Perputaran Per Meja ({stats.tableList.length})
+                      </button>
+                      <button
+                        onClick={() => setStatsSubTab('items')}
+                        style={{
+                          background: statsSubTab === 'items' ? 'var(--primary-color)' : 'rgba(0,0,0,0.04)',
+                          color: statsSubTab === 'items' ? 'white' : 'var(--text-color)',
+                          border: 'none',
+                          padding: '0.55rem 1.1rem',
+                          borderRadius: '12px',
+                          fontWeight: 700,
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <BarChart3 size={18} />
+                        Urutan Pesanan (Paling Laku s/d Tidak Laku) ({stats.itemList.length})
+                      </button>
+                    </div>
+
+                    {statsSubTab === 'tables' && (
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, opacity: 0.8, background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', padding: '0.4rem 0.85rem', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                        Total Meja Dipakai: <strong>{stats.distinctTablesUsed} Meja</strong> | Perputaran: <strong>{stats.physicalTurnoverCount}x</strong> | Total Order: <strong>{stats.totalOrdersReceived} Pesanan</strong>
+                      </div>
+                    )}
                   </div>
 
                   {statsSubTab === 'tables' ? (
@@ -2727,6 +2823,7 @@ export default function CashierDashboard() {
                               <th style={{ padding: '0.85rem 1rem', width: '50px' }}>No</th>
                               <th style={{ padding: '0.85rem 1rem' }}>Nomor Meja</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Jumlah Perputaran (Turnover)</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Order Diterima</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Rata-Rata Durasi Terisi</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue Meja</th>
                               <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
@@ -2761,6 +2858,18 @@ export default function CashierDashboard() {
                                     {item.turnoverCount}x selesai
                                   </span>
                                 </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
+                                  <span style={{
+                                    background: 'rgba(14, 165, 233, 0.12)',
+                                    color: '#0284c7',
+                                    padding: '0.3rem 0.75rem',
+                                    borderRadius: '14px',
+                                    fontWeight: 800,
+                                    fontSize: '0.88rem'
+                                  }}>
+                                    {item.totalOrdersCount} pesanan
+                                  </span>
+                                </td>
                                 <td style={{ padding: '0.8rem 1rem', textAlign: 'center', fontWeight: 600 }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
                                     <Clock size={14} style={{ color: '#d97706' }} />
@@ -2793,7 +2902,10 @@ export default function CashierDashboard() {
                             <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
                               <td colSpan={2} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN</td>
                               <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
-                                {stats.totalTurnoverCount} Perputaran
+                                {stats.totalTurnoverCount} Perputaran ({stats.distinctTablesUsed} Meja Fisik)
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#0284c7', fontSize: '1rem' }}>
+                                {stats.totalOrdersReceived} Order Tiket
                               </td>
                               <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#d97706', fontSize: '0.95rem' }}>
                                 Avg: {formatDuration(stats.avgDurationMsOverall)}
@@ -2814,89 +2926,200 @@ export default function CashierDashboard() {
                       </p>
                     )
                   ) : (
-                    /* Sub-Tab 2: Menu Item Sales & Revenue Contribution (Most Sold to Least Sold) */
-                    stats.itemList.length > 0 ? (
-                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                          <thead>
-                            <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                              <th style={{ padding: '0.85rem 1rem', width: '50px' }}>No</th>
-                              <th style={{ padding: '0.85rem 1rem' }}>Nama Makanan / Item</th>
-                              <th style={{ padding: '0.85rem 1rem' }}>Kategori</th>
-                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Terjual (Porsi)</th>
-                              <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Harga Satuan</th>
-                              <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue (Rp)</th>
-                              <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {stats.itemList.map((item, idx) => (
-                              <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
-                                <td style={{ padding: '0.8rem 1rem', fontWeight: 600, opacity: 0.6 }}>{idx + 1}</td>
-                                <td style={{ padding: '0.8rem 1rem', fontWeight: 700 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    {idx === 0 && <span style={{ fontSize: '0.75rem', background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '6px', fontWeight: 800 }}>Paling Laku</span>}
-                                    {idx === stats.itemList.length - 1 && stats.itemList.length > 1 && <span style={{ fontSize: '0.75rem', background: '#ef4444', color: 'white', padding: '2px 6px', borderRadius: '6px', fontWeight: 800 }}>Paling Sedikit</span>}
-                                    <span>{item.name}</span>
-                                  </div>
+                    /* Sub-Tab 2: Menu Item Sales & Ranking (Most Sold to Least Sold) */
+                    <div>
+                      {/* Filter & Sort Controls */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.02)', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+                          {/* Search Input */}
+                          <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
+                            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                            <input
+                              type="text"
+                              className="input"
+                              placeholder="Cari nama menu / item..."
+                              value={statsItemSearch}
+                              onChange={(e) => setStatsItemSearch(e.target.value)}
+                              style={{ paddingLeft: '2.2rem', paddingRight: '0.5rem', paddingTop: '0.4rem', paddingBottom: '0.4rem', fontSize: '0.85rem', width: '100%' }}
+                            />
+                          </div>
+
+                          {/* Category Filter */}
+                          <select
+                            className="input"
+                            value={statsItemCategory}
+                            onChange={(e) => setStatsItemCategory(e.target.value)}
+                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', borderRadius: '8px', minWidth: '160px' }}
+                          >
+                            <option value="ALL">Semua Kategori ({stats.itemList.length})</option>
+                            {categoriesInStats.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+
+                          {/* Sort Toggle Button */}
+                          <button
+                            onClick={() => setStatsItemSort(prev => prev === 'desc' ? 'asc' : 'desc')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '0.4rem 0.85rem',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border-color)',
+                              background: statsItemSort === 'desc' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                              color: statsItemSort === 'desc' ? '#059669' : '#dc2626',
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {statsItemSort === 'desc' ? <Flame size={16} /> : <AlertTriangle size={16} />}
+                            {statsItemSort === 'desc' ? 'Urutan: Paling Laku → Tidak Laku' : 'Urutan: Paling Tidak Laku → Laku'}
+                            <ArrowUpDown size={14} style={{ marginLeft: '4px' }} />
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                          <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', padding: '0.25rem 0.6rem', borderRadius: '8px' }}>
+                            🔥 {stats.itemList.filter(i => i.quantity > 0).length} Menu Terjual
+                          </span>
+                          <span style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', padding: '0.25rem 0.6rem', borderRadius: '8px' }}>
+                            ❄️ {stats.itemList.filter(i => i.quantity === 0).length} Belum Terjual
+                          </span>
+                        </div>
+                      </div>
+
+                      {filteredStatsItems.length > 0 ? (
+                        <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                            <thead>
+                              <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                                <th style={{ padding: '0.85rem 1rem', width: '60px' }}>Peringkat</th>
+                                <th style={{ padding: '0.85rem 1rem' }}>Status / Level Laku</th>
+                                <th style={{ padding: '0.85rem 1rem' }}>Nama Makanan / Item</th>
+                                <th style={{ padding: '0.85rem 1rem' }}>Kategori</th>
+                                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Terjual (Porsi)</th>
+                                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Frekuensi Dipesan</th>
+                                <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Harga Satuan</th>
+                                <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue (Rp)</th>
+                                <th style={{ padding: '0.85rem 1rem', width: '200px' }}>Kontribusi Revenue (%)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredStatsItems.map((item, idx) => {
+                                const rank = statsItemSort === 'desc' ? idx + 1 : filteredStatsItems.length - idx;
+                                const isUnsold = item.quantity === 0;
+                                const isTop3 = statsItemSort === 'desc' && idx < 3 && item.quantity > 0;
+
+                                return (
+                                  <tr key={item.name + idx} style={{ borderBottom: '1px solid var(--border-color)', background: isUnsold ? 'rgba(239, 68, 68, 0.02)' : idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                                    <td style={{ padding: '0.8rem 1rem', fontWeight: 800, opacity: 0.7, fontSize: '0.95rem' }}>
+                                      #{rank}
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem' }}>
+                                      {isUnsold ? (
+                                        <span style={{ fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', padding: '3px 8px', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          ❄️ Belum Terjual (0 Porsi)
+                                        </span>
+                                      ) : isTop3 ? (
+                                        <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.15)', color: '#059669', padding: '3px 8px', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          🔥 Paling Laku #{rank}
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', padding: '3px 8px', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          👍 Terjual ({item.quantity}x)
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem', fontWeight: 700 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {item.image ? (
+                                          <img
+                                            src={item.image}
+                                            alt={item.name}
+                                            style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-color)', flexShrink: 0 }}
+                                          />
+                                        ) : (
+                                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', flexShrink: 0 }}>
+                                            <Utensils size={18} />
+                                          </div>
+                                        )}
+                                        <span>{item.name}</span>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem', opacity: 0.8 }}>
+                                      <span style={{ background: 'rgba(0,0,0,0.05)', padding: '0.25rem 0.65rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
+                                        {item.category}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
+                                      <span style={{
+                                        background: isUnsold ? 'rgba(0,0,0,0.05)' : 'rgba(59, 130, 246, 0.12)',
+                                        color: isUnsold ? '#9ca3af' : '#2563eb',
+                                        padding: '0.3rem 0.75rem',
+                                        borderRadius: '14px',
+                                        fontWeight: 800,
+                                        fontSize: '0.88rem'
+                                      }}>
+                                        {item.quantity}x porsi
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem', textAlign: 'center', opacity: isUnsold ? 0.5 : 0.9 }}>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                                        {item.orderCount > 0 ? `${item.orderCount} Order Tiket` : '-'}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem', textAlign: 'right', opacity: 0.8 }}>
+                                      Rp {item.unitPrice.toLocaleString('id-ID')}
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: 800, color: isUnsold ? '#9ca3af' : 'var(--primary-color)', fontSize: '0.95rem' }}>
+                                      Rp {item.totalRevenue.toLocaleString('id-ID')}
+                                    </td>
+                                    <td style={{ padding: '0.8rem 1rem' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
+                                          <span>{item.revenueSharePercent.toFixed(1)}%</span>
+                                        </div>
+                                        <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                                          <div style={{
+                                            width: `${Math.min(100, Math.max(0, item.revenueSharePercent))}%`,
+                                            height: '100%',
+                                            background: isUnsold ? '#cbd5e1' : isTop3 ? '#10b981' : 'var(--primary-color)',
+                                            borderRadius: '4px',
+                                            transition: 'width 0.3s ease'
+                                          }} />
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
+                                <td colSpan={4} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN ({filteredStatsItems.length} Menu)</td>
+                                <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
+                                  {filteredStatsItems.reduce((sum, i) => sum + i.quantity, 0)} Porsi
                                 </td>
-                                <td style={{ padding: '0.8rem 1rem', opacity: 0.8 }}>
-                                  <span style={{ background: 'rgba(0,0,0,0.05)', padding: '0.25rem 0.65rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
-                                    {item.category}
-                                  </span>
+                                <td></td>
+                                <td></td>
+                                <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
+                                  Rp {filteredStatsItems.reduce((sum, i) => sum + i.totalRevenue, 0).toLocaleString('id-ID')}
                                 </td>
-                                <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
-                                  <span style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', padding: '0.3rem 0.75rem', borderRadius: '14px', fontWeight: 800, fontSize: '0.88rem' }}>
-                                    {item.quantity}x porsi
-                                  </span>
-                                </td>
-                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', opacity: 0.8 }}>
-                                  Rp {item.unitPrice.toLocaleString('id-ID')}
-                                </td>
-                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: 800, color: 'var(--primary-color)', fontSize: '0.95rem' }}>
-                                  Rp {item.totalRevenue.toLocaleString('id-ID')}
-                                </td>
-                                <td style={{ padding: '0.8rem 1rem' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
-                                      <span>{item.revenueSharePercent.toFixed(1)}%</span>
-                                    </div>
-                                    <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                                      <div style={{
-                                        width: `${Math.min(100, Math.max(0, item.revenueSharePercent))}%`,
-                                        height: '100%',
-                                        background: '#10b981',
-                                        borderRadius: '4px',
-                                        transition: 'width 0.3s ease'
-                                      }} />
-                                    </div>
-                                  </div>
+                                <td style={{ padding: '0.9rem 1rem', fontWeight: 800, color: '#2563eb' }}>
+                                  100%
                                 </td>
                               </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
-                              <td colSpan={3} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN (1 HARI)</td>
-                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
-                                {stats.itemList.reduce((sum, i) => sum + i.quantity, 0)} Porsi
-                              </td>
-                              <td></td>
-                              <td style={{ padding: '0.9rem 1rem', textAlign: 'right', color: '#2563eb', fontSize: '1.15rem' }}>
-                                Rp {stats.totalRevenueOverall.toLocaleString('id-ID')}
-                              </td>
-                              <td style={{ padding: '0.9rem 1rem', fontWeight: 800, color: '#2563eb' }}>
-                                100%
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    ) : (
-                      <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
-                        Belum ada penjualan menu makanan / minuman pada tanggal {statsDate}.
-                      </p>
-                    )
+                            </tfoot>
+                          </table>
+                        </div>
+                      ) : (
+                        <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
+                          Tidak ada menu yang sesuai dengan pencarian / filter "{statsItemSearch}".
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

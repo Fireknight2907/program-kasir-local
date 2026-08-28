@@ -22,6 +22,7 @@ https://program-kasir-local-bice.vercel.app/
 - tambah fitur untuk melihat diakhir shift/hari jam/shift paling ramai
 - tambah gambar menu/promo baru yang dibuat oleh restoran di tampilan customer
 - buat fitur untuk bisa mengurutkan dari yang paling banyak kontribusi dan juga yang paling banyak order dipesan
+- buat trial dashboard
 
 
 ## Update
