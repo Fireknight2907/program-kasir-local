@@ -59,9 +59,7 @@ export default function CashierDashboard() {
 
   // Statistics sub-tab state ('tables' | 'items' | 'hourly')
   const [statsSubTab, setStatsSubTab] = useState('tables');
-  const [statsItemSearch, setStatsItemSearch] = useState('');
-  const [statsItemCategory, setStatsItemCategory] = useState('ALL');
-  const [statsItemSort, setStatsItemSort] = useState('desc'); // 'desc': Paling Laku -> Tidak Laku, 'asc': Paling Tidak Laku -> Laku
+  const [statsItemSort, setStatsItemSort] = useState('qty_desc'); // 'qty_desc', 'qty_asc', 'rev_desc', 'rev_asc'
   const [selectedHourFilter, setSelectedHourFilter] = useState('ALL');
 
   // Menu management state
@@ -2639,25 +2637,20 @@ export default function CashierDashboard() {
           ? new Date(statsDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
           : statsDate;
 
-        const categoriesInStats = Array.from(new Set((stats.itemList || []).map(i => i?.category))).filter(Boolean);
-        const filteredStatsItems = (stats.itemList || [])
-          .filter(item => {
-            if (!item) return false;
-            const name = item.name || '';
-            const category = item.category || '';
-            const search = (statsItemSearch || '').toLowerCase();
-            const matchesSearch = name.toLowerCase().includes(search) || category.toLowerCase().includes(search);
-            const matchesCategory = statsItemCategory === 'ALL' || category === statsItemCategory;
-            return matchesSearch && matchesCategory;
-          })
-          .sort((a, b) => {
-            if (statsItemSort === 'asc') {
-              // Paling Tidak Laku -> Paling Laku
-              return (a.quantity || 0) - (b.quantity || 0) || (a.totalRevenue || 0) - (b.totalRevenue || 0);
-            }
-            // Paling Laku -> Paling Tidak Laku
-            return (b.quantity || 0) - (a.quantity || 0) || (b.totalRevenue || 0) - (a.totalRevenue || 0);
-          });
+        const filteredStatsItems = [...(stats.itemList || [])].sort((a, b) => {
+          if (!a || !b) return 0;
+          if (statsItemSort === 'qty_asc' || statsItemSort === 'asc') {
+            return (a.quantity || 0) - (b.quantity || 0) || (a.totalRevenue || 0) - (b.totalRevenue || 0);
+          }
+          if (statsItemSort === 'rev_desc') {
+            return (b.totalRevenue || 0) - (a.totalRevenue || 0) || (b.quantity || 0) - (a.quantity || 0);
+          }
+          if (statsItemSort === 'rev_asc') {
+            return (a.totalRevenue || 0) - (b.totalRevenue || 0) || (a.quantity || 0) - (b.quantity || 0);
+          }
+          // Default 'qty_desc' atau 'desc' (Paling Laku berdasarkan Porsi)
+          return (b.quantity || 0) - (a.quantity || 0) || (b.totalRevenue || 0) - (a.totalRevenue || 0);
+        });
 
         return (
           <div>
@@ -3018,58 +3011,25 @@ export default function CashierDashboard() {
                       </p>
                     )
                   ) : statsSubTab === 'items' ? (
-                    /* Sub-Tab 2: Menu Item Sales & Ranking (Most Sold to Least Sold) */
+                    /* Sub-Tab 2: Menu Item Sales & Ranking (Most Sold to Least Sold / Contribution to Revenue) */
                     <div>
-                      {/* Filter & Sort Controls */}
+                      {/* Sort Controls */}
                       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.02)', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
-                          {/* Search Input */}
-                          <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
-                            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="Cari nama menu / item..."
-                              value={statsItemSearch}
-                              onChange={(e) => setStatsItemSearch(e.target.value)}
-                              style={{ paddingLeft: '2.2rem', paddingRight: '0.5rem', paddingTop: '0.4rem', paddingBottom: '0.4rem', fontSize: '0.85rem', width: '100%' }}
-                            />
-                          </div>
-
-                          {/* Category Filter */}
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.88rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <ArrowUpDown size={16} /> Urutkan Berdasarkan:
+                          </span>
                           <select
                             className="input"
-                            value={statsItemCategory}
-                            onChange={(e) => setStatsItemCategory(e.target.value)}
-                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', borderRadius: '8px', minWidth: '160px' }}
+                            value={statsItemSort}
+                            onChange={(e) => setStatsItemSort(e.target.value)}
+                            style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '8px', minWidth: '280px', background: 'var(--card-bg)', cursor: 'pointer' }}
                           >
-                            <option value="ALL">Semua Kategori ({stats.itemList.length})</option>
-                            {categoriesInStats.map(cat => (
-                              <option key={cat} value={cat}>{cat}</option>
-                            ))}
+                            <option value="qty_desc">🔥 Paling Laku (Porsi Terbanyak Terjual)</option>
+                            <option value="rev_desc">💰 Revenue / Omset Tertinggi (Kontribusi Terbesar)</option>
+                            <option value="qty_asc">❄️ Paling Tidak Laku (Porsi Tersedikit)</option>
+                            <option value="rev_asc">📉 Revenue / Omset Terendah (Kontribusi Terkecil)</option>
                           </select>
-
-                          {/* Sort Toggle Button */}
-                          <button
-                            onClick={() => setStatsItemSort(prev => prev === 'desc' ? 'asc' : 'desc')}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '0.4rem 0.85rem',
-                              borderRadius: '8px',
-                              border: '1px solid var(--border-color)',
-                              background: statsItemSort === 'desc' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                              color: statsItemSort === 'desc' ? '#059669' : '#dc2626',
-                              fontWeight: 700,
-                              fontSize: '0.85rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {statsItemSort === 'desc' ? <Flame size={16} /> : <AlertTriangle size={16} />}
-                            {statsItemSort === 'desc' ? 'Urutan: Paling Laku → Tidak Laku' : 'Urutan: Paling Tidak Laku → Laku'}
-                            <ArrowUpDown size={14} style={{ marginLeft: '4px' }} />
-                          </button>
                         </div>
 
                         <div style={{ display: 'flex', gap: '8px', fontSize: '0.78rem', fontWeight: 700 }}>
@@ -3090,7 +3050,6 @@ export default function CashierDashboard() {
                                 <th style={{ padding: '0.85rem 1rem', width: '60px' }}>Peringkat</th>
                                 <th style={{ padding: '0.85rem 1rem' }}>Status / Level Laku</th>
                                 <th style={{ padding: '0.85rem 1rem' }}>Nama Makanan / Item</th>
-                                <th style={{ padding: '0.85rem 1rem' }}>Kategori</th>
                                 <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Terjual (Porsi)</th>
                                 <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Frekuensi Dipesan</th>
                                 <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Harga Satuan</th>
@@ -3100,9 +3059,11 @@ export default function CashierDashboard() {
                             </thead>
                             <tbody>
                               {filteredStatsItems.map((item, idx) => {
-                                const rank = statsItemSort === 'desc' ? idx + 1 : filteredStatsItems.length - idx;
+                                const rank = idx + 1;
+                                const isRevSort = statsItemSort === 'rev_desc' || statsItemSort === 'rev_asc';
+                                const isAsc = statsItemSort === 'qty_asc' || statsItemSort === 'asc' || statsItemSort === 'rev_asc';
                                 const isUnsold = item.quantity === 0;
-                                const isTop3 = statsItemSort === 'desc' && idx < 3 && item.quantity > 0;
+                                const isTop3 = !isAsc && idx < 3 && item.quantity > 0;
 
                                 return (
                                   <tr key={item.name + idx} style={{ borderBottom: '1px solid var(--border-color)', background: isUnsold ? 'rgba(239, 68, 68, 0.02)' : idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
@@ -3115,8 +3076,8 @@ export default function CashierDashboard() {
                                           ❄️ Belum Terjual (0 Porsi)
                                         </span>
                                       ) : isTop3 ? (
-                                        <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.15)', color: '#059669', padding: '3px 8px', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                          🔥 Paling Laku #{rank}
+                                        <span style={{ fontSize: '0.75rem', background: isRevSort ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: isRevSort ? '#2563eb' : '#059669', padding: '3px 8px', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          {isRevSort ? `💰 Top Omset #${rank}` : `🔥 Paling Laku #${rank}`}
                                         </span>
                                       ) : (
                                         <span style={{ fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', padding: '3px 8px', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -3139,11 +3100,6 @@ export default function CashierDashboard() {
                                         )}
                                         <span>{item.name}</span>
                                       </div>
-                                    </td>
-                                    <td style={{ padding: '0.8rem 1rem', opacity: 0.8 }}>
-                                      <span style={{ background: 'rgba(0,0,0,0.05)', padding: '0.25rem 0.65rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
-                                        {item.category}
-                                      </span>
                                     </td>
                                     <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
                                       <span style={{
@@ -3190,7 +3146,7 @@ export default function CashierDashboard() {
                             </tbody>
                             <tfoot>
                               <tr style={{ background: 'rgba(59, 130, 246, 0.05)', borderTop: '2px solid var(--border-color)', fontWeight: 800 }}>
-                                <td colSpan={4} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN ({filteredStatsItems.length} Menu)</td>
+                                <td colSpan={3} style={{ padding: '0.9rem 1rem', fontSize: '0.95rem' }}>TOTAL KESELURUHAN ({filteredStatsItems.length} Menu)</td>
                                 <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#059669', fontSize: '1rem' }}>
                                   {filteredStatsItems.reduce((sum, i) => sum + i.quantity, 0)} Porsi
                                 </td>
@@ -3208,7 +3164,7 @@ export default function CashierDashboard() {
                         </div>
                       ) : (
                         <p style={{ fontStyle: 'italic', opacity: 0.7, margin: 0, padding: '1.5rem 0', textAlign: 'center' }}>
-                          Tidak ada menu yang sesuai dengan pencarian / filter "{statsItemSearch}".
+                          Belum ada data transaksi menu pada tanggal {statsDate}.
                         </p>
                       )}
                     </div>
