@@ -460,6 +460,11 @@ export default function CashierDashboard() {
     const activeHoursList = hourlyList.filter(h => h.orderCount > 0);
     const peakHour = activeHoursList.length > 0 ? [...activeHoursList].sort((a, b) => b.orderCount - a.orderCount || b.totalItemsQuantity - a.totalItemsQuantity)[0] : null;
 
+    const totalItemsSoldOverall = itemList.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const totalDistinctItemsSold = itemsWithSales.length;
+    const avgItemsPerOrder = totalOrdersReceived > 0 ? (totalItemsSoldOverall / totalOrdersReceived) : 0;
+    const avgItemsPerTable = distinctTablesUsed > 0 ? (totalItemsSoldOverall / distinctTablesUsed) : 0;
+
     return {
       totalRevenueOverall,
       totalTurnoverCount,
@@ -471,6 +476,10 @@ export default function CashierDashboard() {
       initialOrdersCount,
       additionalOrdersCount,
       avgOrdersPerTable,
+      totalItemsSoldOverall,
+      totalDistinctItemsSold,
+      avgItemsPerOrder,
+      avgItemsPerTable,
       avgDurationMsOverall,
       paymentMethods,
       tableList,
@@ -2749,6 +2758,24 @@ export default function CashierDashboard() {
                     </div>
                   </div>
 
+                  {/* Card 3.5: Total Menu Terjual */}
+                  <div style={{ background: 'rgba(99, 102, 241, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#4f46e5', fontWeight: 700 }}>Total Menu Terjual</span>
+                      <div style={{ background: 'rgba(79, 70, 229, 0.15)', color: '#4f46e5', padding: '6px', borderRadius: '10px' }}>
+                        <Utensils size={18} />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#3730a3' }}>
+                        {stats.totalItemsSoldOverall} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Porsi</span>
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', fontWeight: 600, color: '#3730a3' }}>
+                        {stats.totalDistinctItemsSold} jenis menu laku • Avg {stats.avgItemsPerOrder.toFixed(1)} porsi/order
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Card 4: Average Table Duration */}
                   <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '1rem 1.15rem', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -2893,7 +2920,7 @@ export default function CashierDashboard() {
 
                     {statsSubTab === 'tables' && (
                       <div style={{ fontSize: '0.82rem', fontWeight: 600, opacity: 0.8, background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', padding: '0.4rem 0.85rem', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                        Total Meja Dipakai: <strong>{stats.distinctTablesUsed} Meja</strong> | Perputaran: <strong>{stats.physicalTurnoverCount}x</strong> | Total Order: <strong>{stats.totalOrdersReceived} Pesanan</strong>
+                        Total Meja Dipakai: <strong>{stats.distinctTablesUsed} Meja</strong> | Perputaran: <strong>{stats.physicalTurnoverCount}x</strong> | Total Order: <strong>{stats.totalOrdersReceived} Pesanan</strong> | Total Menu Terjual: <strong>{stats.totalItemsSoldOverall} Porsi</strong>
                       </div>
                     )}
                   </div>
