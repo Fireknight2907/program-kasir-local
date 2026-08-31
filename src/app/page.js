@@ -305,6 +305,7 @@ export default function CashierDashboard() {
           totalDurationMs: 0,
           durationCount: 0,
           totalOrdersCount: 0,
+          totalItemsQuantity: 0,
         };
       }
 
@@ -384,6 +385,8 @@ export default function CashierDashboard() {
               }
               itemsInThisOrder.add(name);
 
+              tableMap[rawTable].totalItemsQuantity += qty;
+
               // Track hourly stats items
               hourlyMap[h].totalItemsQuantity += qty;
               hourlyMap[h].totalRevenue += itemTotal;
@@ -428,10 +431,14 @@ export default function CashierDashboard() {
     const tableList = Object.values(tableMap).map(t => {
       const avgDurationMs = t.durationCount > 0 ? (t.totalDurationMs / t.durationCount) : 0;
       const revenueSharePercent = totalRevenueOverall > 0 ? ((t.totalRevenue / totalRevenueOverall) * 100) : 0;
+      const avgItemsPerTurnover = t.turnoverCount > 0 ? (t.totalItemsQuantity / t.turnoverCount) : 0;
+      const avgItemsPerOrder = t.totalOrdersCount > 0 ? (t.totalItemsQuantity / t.totalOrdersCount) : 0;
       return {
         ...t,
         avgDurationMs,
         revenueSharePercent,
+        avgItemsPerTurnover,
+        avgItemsPerOrder,
       };
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
@@ -2936,6 +2943,7 @@ export default function CashierDashboard() {
                               <th style={{ padding: '0.85rem 1rem' }}>Nomor Meja</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Jumlah Perputaran (Turnover)</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Order Diterima</th>
+                              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Avg Menu Dipesan</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Rata-Rata Durasi Terisi</th>
                               <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue Meja</th>
                               <th style={{ padding: '0.85rem 1rem', width: '220px' }}>Kontribusi Revenue (%)</th>
@@ -2982,6 +2990,23 @@ export default function CashierDashboard() {
                                     {item.totalOrdersCount} pesanan
                                   </span>
                                 </td>
+                                <td style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                    <span style={{
+                                      background: 'rgba(99, 102, 241, 0.12)',
+                                      color: '#4f46e5',
+                                      padding: '0.25rem 0.65rem',
+                                      borderRadius: '12px',
+                                      fontWeight: 800,
+                                      fontSize: '0.85rem'
+                                    }}>
+                                      {item.avgItemsPerTurnover.toFixed(1)} porsi / meja
+                                    </span>
+                                    <span style={{ fontSize: '0.72rem', opacity: 0.7, fontWeight: 600 }}>
+                                      (Total {item.totalItemsQuantity} porsi)
+                                    </span>
+                                  </div>
+                                </td>
                                 <td style={{ padding: '0.8rem 1rem', textAlign: 'center', fontWeight: 600 }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
                                     <Clock size={14} style={{ color: '#d97706' }} />
@@ -3018,6 +3043,9 @@ export default function CashierDashboard() {
                               </td>
                               <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#0284c7', fontSize: '1rem' }}>
                                 {stats.totalOrdersReceived} Order Tiket
+                              </td>
+                              <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#4f46e5', fontSize: '0.95rem' }}>
+                                Avg: {stats.avgItemsPerTable.toFixed(1)} porsi / meja ({stats.totalItemsSoldOverall} Porsi)
                               </td>
                               <td style={{ padding: '0.9rem 1rem', textAlign: 'center', color: '#d97706', fontSize: '0.95rem' }}>
                                 Avg: {formatDuration(stats.avgDurationMsOverall)}
