@@ -54,10 +54,15 @@ tambah fitur untuk melihat kontribusi menu untuk revenue
 8/31
 hapus fitur untuk mencari dan mengganti kategori di menu statistik meja menu urutan pesanan
 
-
-
-
-
+9/8/2026
+- Perbaiki pesanan dari halaman pelanggan lama agar ditolak saat sesi meja sudah ditutup, dibatalkan, atau tidak berlaku.
+- Cegah sesi lama aktif kembali ketika nomor meja yang sama sudah dipakai untuk sesi baru.
+- Tampilkan pesan sesi ditutup dan permintaan QR baru ketika pesanan pelanggan ditolak.
+- Gabungkan penyimpanan order dan pembaruan total dalam satu transaksi database agar perubahan dibatalkan seluruhnya jika penyimpanan gagal.
+- Perbaiki order dobel dan total tidak sesuai saat edit pesanan disimpan cepat berulang: proses simpan untuk sesi yang sama dijalankan bergantian di server.
+- Kunci tombol simpan, tambah/kurangi item, dan tutup modal selama edit pesanan disimpan; tampilkan status Menyimpan.
+- Tolak edit pada sesi tertutup serta validasi item dan total pesanan.
+- Tambah 14 pengujian otomatis dengan database tiruan untuk sesi tertutup, pemakaian ulang nomor meja, klik cepat, simpan bersamaan, konsistensi total, dan pembatalan perubahan saat gagal.
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 

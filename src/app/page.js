@@ -29,6 +29,8 @@ export default function CashierDashboard() {
 
   // Edit Order state
   const [showEditOrderModal, setShowEditOrderModal] = useState(false);
+  const [savingEditOrder, setSavingEditOrder] = useState(false);
+  const editOrderSavingRef = useRef(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [editingOrderItems, setEditingOrderItems] = useState([]);
   const [editOrderSearch, setEditOrderSearch] = useState('');
@@ -1190,6 +1192,7 @@ export default function CashierDashboard() {
   };
 
   const openEditOrderModal = (trx) => {
+    if (editOrderSavingRef.current) return;
     setEditingTransaction(trx);
     const consolidated = [];
     trx.orders?.forEach(order => {
@@ -1212,6 +1215,7 @@ export default function CashierDashboard() {
   };
 
   const updateEditingQuantity = (menuItemId, delta) => {
+    if (editOrderSavingRef.current) return;
     setEditingOrderItems(prev => {
       return prev.map(item => {
         if (item.menuItem.id === menuItemId) {
@@ -1223,6 +1227,7 @@ export default function CashierDashboard() {
   };
 
   const addNewItemToEditing = (menuItem) => {
+    if (editOrderSavingRef.current) return;
     setEditingOrderItems(prev => {
       const existing = prev.find(item => item.menuItem.id === menuItem.id);
       if (existing) {
@@ -1234,6 +1239,10 @@ export default function CashierDashboard() {
   };
 
   const handleSaveEditOrder = async () => {
+    // Ref blocks a second click immediately, before React renders disabled UI.
+    if (editOrderSavingRef.current || !editingTransaction) return;
+    editOrderSavingRef.current = true;
+    setSavingEditOrder(true);
     try {
       const payload = {
         items: editingOrderItems.map(item => ({
@@ -1248,18 +1257,22 @@ export default function CashierDashboard() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
+        // Refresh before allowing another edit, so the modal uses saved data.
+        if (activeTab === 'transactions') await fetchTransactions();
+        if (activeTab === 'archive') await fetchArchive();
         setShowEditOrderModal(false);
-        if (activeTab === 'transactions') fetchTransactions();
-        if (activeTab === 'archive') fetchArchive();
       } else {
-        alert('Gagal menyimpan pesanan.');
+        const failure = await res.json().catch(() => ({}));
+        alert(failure.error || 'Gagal menyimpan pesanan.');
       }
     } catch (e) {
       console.error(e);
-      alert('Terjadi kesalahan.');
+      alert('Koneksi bermasalah. Periksa daftar pesanan sebelum mencoba kembali.');
+    } finally {
+      editOrderSavingRef.current = false;
+      setSavingEditOrder(false);
     }
   };
-
   // Image Upload handler for PNG
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -2233,7 +2246,7 @@ export default function CashierDashboard() {
               <div className="glass-card" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', background: 'var(--bg-color)', display: 'flex', flexDirection: 'column' }}>
                 <div className="flex justify-between items-center mb-4">
                   <h3>Edit Pesanan (Meja {editingTransaction.tableNumber || '-'})</h3>
-                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowEditOrderModal(false)}>
+                  <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowEditOrderModal(false)}>
                     <X size={18} />
                   </button>
                 </div>
@@ -2253,9 +2266,9 @@ export default function CashierDashboard() {
                               <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.8 }}>Rp {item.price.toLocaleString('id-ID')} / item</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <button className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.menuItem.id, -1)}>-</button>
+                              <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.menuItem.id, -1)}>-</button>
                               <span style={{ fontWeight: 700, minWidth: '1.5rem', textAlign: 'center' }}>{item.quantity}</span>
-                              <button className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.menuItem.id, 1)}>+</button>
+                              <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.menuItem.id, 1)}>+</button>
                             </div>
                           </div>
                         ))}
@@ -2298,7 +2311,7 @@ export default function CashierDashboard() {
                               <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.8 }}>Rp {menu.price.toLocaleString('id-ID')}</p>
                             </div>
                             {menu.isAvailable !== false && (
-                              <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => addNewItemToEditing(menu)}>
+                              <button disabled={savingEditOrder} className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => addNewItemToEditing(menu)}>
                                 <Plus size={14} /> Tambah
                               </button>
                             )}
@@ -2309,8 +2322,8 @@ export default function CashierDashboard() {
                 </div>
 
                 <div className="flex gap-4 justify-end mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
-                  <button className="btn btn-outline" onClick={() => setShowEditOrderModal(false)}>Batal</button>
-                  <button className="btn btn-primary" onClick={handleSaveEditOrder}>Simpan Perubahan</button>
+                  <button disabled={savingEditOrder} className="btn btn-outline" onClick={() => setShowEditOrderModal(false)}>Batal</button>
+                  <button disabled={savingEditOrder} className="btn btn-primary" onClick={handleSaveEditOrder}>{savingEditOrder ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
                 </div>
               </div>
             </div>

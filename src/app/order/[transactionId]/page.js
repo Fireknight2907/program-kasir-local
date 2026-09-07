@@ -192,7 +192,15 @@ export default function OrderPage({ params }) {
         setOrdered(true);
         setShowCartModal(false);
       } else {
-        setError('Gagal mengirim pesanan. Silakan coba lagi.');
+        const failure = await res.json().catch(() => ({}));
+        if (res.status === 409 && failure.code === 'SESSION_CLOSED') {
+          setCart({});
+          setOrdered(false);
+          setShowCartModal(false);
+          setError(failure.error || 'Sesi meja ini sudah ditutup. Silakan minta QR Code baru kepada kasir.');
+        } else {
+          setError('Gagal mengirim pesanan. Silakan coba lagi.');
+        }
       }
     } catch (err) {
       setError('Terjadi kesalahan.');

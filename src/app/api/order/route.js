@@ -3,15 +3,15 @@ import prisma from '@/lib/prisma';
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { transactionId, items, isTakeaway } = body;
-    
-    // items should be [{ menuItemId, quantity, price }]
-    
+    const { transactionId, items, isTakeaway } = await request.json();
+    if (typeof transactionId !== 'string' || !transactionId.trim() ||
+        !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'Pesanan tidak valid.' }, { status: 400 });
+    }
+
     let orderTotal = 0;
     const orderItemsData = items.map(item => {
-      const itemTotal = item.price * item.quantity;
-      orderTotal += itemTotal;
+      orderTotal += item.price * item.quantity;
       return {
         menuItemId: item.menuItemId,
         quantity: item.quantity,
@@ -19,27 +19,39 @@ export async function POST(request) {
       };
     });
 
-    // Create Order and Items
-    const order = await prisma.order.create({
-      data: {
-        transactionId,
-        total: orderTotal,
-        isTakeaway: isTakeaway || false,
-        items: {
-          create: orderItemsData
+    const order = await prisma.$transaction(async (tx) => {
+      // Update first: the row lock serializes this order with session closure.
+      // A closed/deleted session must never create an order or change its total.
+      const activeSession = await tx.transaction.updateMany({
+        where: {
+          id: transactionId,
+          status: { in: ['open', 'ordered'] },
+          completedAt: null
+        },
+        data: {
+          total: { increment: orderTotal },
+          status: 'ordered'
         }
-      }
+      });
+      if (activeSession.count === 0) return null;
+
+      // Any failure here also rolls back the session total above.
+      return tx.order.create({
+        data: {
+          transactionId,
+          total: orderTotal,
+          isTakeaway: isTakeaway || false,
+          items: { create: orderItemsData }
+        }
+      });
     });
 
-    // Update Transaction total and status
-    const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
-    await prisma.transaction.update({
-      where: { id: transactionId },
-      data: {
-        total: transaction.total + orderTotal,
-        status: 'ordered' // update status to ordered since client placed order
-      }
-    });
+    if (!order) {
+      return NextResponse.json({
+        code: 'SESSION_CLOSED',
+        error: 'Sesi meja ini sudah ditutup atau tidak berlaku. Silakan minta QR Code baru kepada kasir.'
+      }, { status: 409 });
+    }
 
     return NextResponse.json(order);
   } catch (error) {
