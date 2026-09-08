@@ -73,3 +73,17 @@ model Category {
   createdAt DateTime @default(now())
 }
 
+
+// Durable receipt survives order replacement by cashier edits.
+model OrderSubmission {
+  id            String   @id @default(cuid())
+  transactionId String
+  requestId     String
+  payloadHash   String
+  quantity      Int
+  response      Json
+  createdAt     DateTime @default(now())
+
+  @@unique([transactionId, requestId])
+  @@index([transactionId, createdAt])
+}

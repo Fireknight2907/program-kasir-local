@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { getSessionUser } from '@/lib/session';
 
 async function checkAdmin() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get('user_session');
-  if (!session) return false;
-  try {
-    const user = JSON.parse(session.value);
-    return user.role === 'ADMIN';
-  } catch (e) {
-    return false;
-  }
+  return (await getSessionUser())?.role === 'ADMIN';
 }
 
 export async function DELETE(request, { params }) {
@@ -37,16 +29,8 @@ export async function DELETE(request, { params }) {
 
 export async function PUT(request, { params }) {
   // Allow admin to edit anyone, or a user to edit themselves
-  const cookieStore = await cookies();
-  const session = cookieStore.get('user_session');
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  
-  let currentUser;
-  try {
-    currentUser = JSON.parse(session.value);
-  } catch (e) {
-    return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
-  }
+  const currentUser = await getSessionUser();
+  if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
   if (currentUser.role !== 'ADMIN' && currentUser.id !== parseInt(id)) {

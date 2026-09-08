@@ -1,3 +1,4 @@
+import { requireStaff } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
@@ -29,10 +30,17 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   const { id } = await params;
   try {
     const body = await request.json();
     const { status, tableNumber, paymentMethod } = body;
+    if ((status !== undefined && !['completed', 'cancelled'].includes(status)) ||
+        (paymentMethod !== undefined && !['CASH', 'QRIS', 'CARD'].includes(paymentMethod)) ||
+        (status === 'completed' && !['CASH', 'QRIS', 'CARD'].includes(paymentMethod))) {
+      return NextResponse.json({ error: 'Status atau metode pembayaran tidak valid.' }, { status: 400 });
+    }
     
     if (tableNumber !== undefined && !tableNumber.toLowerCase().startsWith('take away')) {
       const activeTrxs = await prisma.transaction.findMany({
@@ -76,6 +84,8 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   const { id } = await params;
   try {
     // Delete all OrderItems that belong to Orders that belong to this Transaction

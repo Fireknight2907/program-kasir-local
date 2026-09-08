@@ -8,6 +8,8 @@ import {
   Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus, Banknote, Smartphone, CreditCard, Flame, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Filter
 } from 'lucide-react';
 
+import { newOrderRequestId } from '@/lib/order-request';
+
 export default function CashierDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState(null);
@@ -51,6 +53,8 @@ export default function CashierDashboard() {
   const [takeawayCart, setTakeawayCart] = useState({});
   const [takeawaySearch, setTakeawaySearch] = useState('');
   const [submittingTakeaway, setSubmittingTakeaway] = useState(false);
+  const takeawaySubmittingRef = useRef(false);
+  const [pendingTakeaway, setPendingTakeaway] = useState(false);
   const [takeawayError, setTakeawayError] = useState('');
 
   // Payment Close Order Modal state
@@ -1016,14 +1020,20 @@ export default function CashierDashboard() {
   };
 
   const openDirectTakeawayModal = () => {
+    if (takeawaySubmittingRef.current) return;
     setTakeawayCustomerName('');
     setTakeawayCart({});
     setTakeawaySearch('');
-    setTakeawayError('');
+    try {
+      const saved = JSON.parse(localStorage.getItem('pending-staff-takeaway') || 'null');
+      setPendingTakeaway(Boolean(saved));
+      setTakeawayError(saved ? 'Ada pengiriman sebelumnya yang belum pasti. Klik Cek Pengiriman Sebelumnya sebelum membuat pesanan lain.' : '');
+    } catch { setTakeawayError('Penyimpanan browser bermasalah. Periksa pesanan sebelumnya bersama kasir.'); }
     setShowDirectTakeawayModal(true);
   };
 
   const updateTakeawayCart = (item, delta) => {
+    if (takeawaySubmittingRef.current || pendingTakeaway) return;
     setTakeawayCart(prev => {
       const currentQty = prev[item.id]?.quantity || 0;
       const newQty = Math.max(0, currentQty + delta);
@@ -1039,12 +1049,17 @@ export default function CashierDashboard() {
 
   const handleCreateDirectTakeaway = async (e) => {
     if (e) e.preventDefault();
+    if (takeawaySubmittingRef.current) return;
+    let savedOrder;
+    try { savedOrder = JSON.parse(localStorage.getItem('pending-staff-takeaway') || 'null'); }
+    catch { setTakeawayError('Penyimpanan browser bermasalah. Periksa pesanan sebelumnya sebelum mencoba kembali.'); return; }
     const cartItems = Object.values(takeawayCart);
-    if (cartItems.length === 0) {
+    if (cartItems.length === 0 && !savedOrder) {
       setTakeawayError('Silakan pilih minimal 1 menu makanan / minuman.');
       return;
     }
 
+    takeawaySubmittingRef.current = true;
     setSubmittingTakeaway(true);
     setTakeawayError('');
 
@@ -1052,6 +1067,8 @@ export default function CashierDashboard() {
       const namePart = takeawayCustomerName.trim() ? takeawayCustomerName.trim() : Math.floor(100 + Math.random() * 900);
       const finalTableNumber = `Take Away - ${namePart}`;
 
+      let orderPayload = savedOrder;
+      if (!orderPayload) {
       // 1. Create transaction
       const trxRes = await fetch('/api/transaction', {
         method: 'POST',
@@ -1067,7 +1084,8 @@ export default function CashierDashboard() {
       }
 
       // 2. Submit order items directly
-      const orderPayload = {
+      orderPayload = {
+        requestId: newOrderRequestId(),
         transactionId: trxData.id,
         items: cartItems.map(item => ({
           menuItemId: item.menuItem.id,
@@ -1077,6 +1095,9 @@ export default function CashierDashboard() {
         isTakeaway: true
       };
 
+      }
+      localStorage.setItem('pending-staff-takeaway', JSON.stringify(orderPayload));
+      setPendingTakeaway(true);
       const orderRes = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1084,18 +1105,23 @@ export default function CashierDashboard() {
       });
 
       if (orderRes.ok) {
+        localStorage.removeItem('pending-staff-takeaway');
+        setPendingTakeaway(false);
         setShowDirectTakeawayModal(false);
         setTakeawayCart({});
         fetchTransactions();
       } else {
         const orderErr = await orderRes.json();
+        if (orderRes.status < 500) { localStorage.removeItem('pending-staff-takeaway'); setPendingTakeaway(false); }
         setTakeawayError(orderErr.error || 'Gagal membuat pesanan Take Away.');
       }
     } catch (err) {
       console.error(err);
-      setTakeawayError('Terjadi kesalahan server.');
+      setTakeawayError('Pengiriman belum pasti. Coba simpan lagi untuk memeriksa pengiriman yang sama.');
+    } finally {
+      takeawaySubmittingRef.current = false;
+      setSubmittingTakeaway(false);
     }
-    setSubmittingTakeaway(false);
   };
 
   const openPaymentModal = (trx) => {
@@ -1108,7 +1134,7 @@ export default function CashierDashboard() {
     if (!paymentTransaction) return;
     setSubmittingPayment(true);
     try {
-      await fetch(`/api/transaction/${paymentTransaction.id}`, {
+      const res = await fetch(`/api/transaction/${paymentTransaction.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1116,6 +1142,12 @@ export default function CashierDashboard() {
           paymentMethod: selectedPaymentMethod
         })
       });
+      if (!res.ok) {
+        const failure = await res.json().catch(() => ({}));
+        alert(failure.error || 'Pembayaran gagal disimpan.');
+        if (res.status === 401) router.push('/login');
+        return;
+      }
       setShowPaymentModal(false);
       setPaymentTransaction(null);
       if (activeTab === 'transactions') fetchTransactions();
@@ -1123,8 +1155,10 @@ export default function CashierDashboard() {
       if (activeTab === 'stats') fetchStats();
     } catch (e) {
       console.error(e);
+      alert('Koneksi bermasalah. Periksa status transaksi sebelum mencoba kembali.');
+    } finally {
+      setSubmittingPayment(false);
     }
-    setSubmittingPayment(false);
   };
 
   const handleChangeTableNumber = async (id, currentNumber) => {
@@ -1245,6 +1279,7 @@ export default function CashierDashboard() {
     setSavingEditOrder(true);
     try {
       const payload = {
+        expectedOrderIds: (editingTransaction.orders || []).map(order => order.id),
         items: editingOrderItems.map(item => ({
           menuItemId: item.menuItem.id,
           quantity: item.quantity,
@@ -1263,6 +1298,11 @@ export default function CashierDashboard() {
         setShowEditOrderModal(false);
       } else {
         const failure = await res.json().catch(() => ({}));
+        if (res.status === 409 && failure.code === 'ORDER_CONFLICT') {
+          setShowEditOrderModal(false);
+          if (activeTab === 'transactions') await fetchTransactions();
+          if (activeTab === 'archive') await fetchArchive();
+        }
         alert(failure.error || 'Gagal menyimpan pesanan.');
       }
     } catch (e) {
@@ -1980,9 +2020,9 @@ export default function CashierDashboard() {
                           className="btn"
                           style={{ width: '65%', background: '#f59e0b', color: 'white', borderColor: '#f59e0b', fontWeight: 800, fontSize: '0.88rem' }}
                           onClick={handleCreateDirectTakeaway}
-                          disabled={submittingTakeaway || Object.keys(takeawayCart).length === 0}
+                          disabled={submittingTakeaway || (!pendingTakeaway && Object.keys(takeawayCart).length === 0)}
                         >
-                          {submittingTakeaway ? 'Mengirim...' : 'Kirim Pesanan Take Away'}
+                          {submittingTakeaway ? 'Memeriksa...' : pendingTakeaway ? 'Cek Pengiriman Sebelumnya' : 'Kirim Pesanan Take Away'}
                         </button>
                       </div>
                     </div>

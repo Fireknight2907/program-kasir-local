@@ -1,19 +1,11 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { getSessionUser } from '@/lib/session';
 
 export async function PUT(request) {
   try {
-    const cookieStore = await cookies();
-    const session = cookieStore.get('user_session');
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    
-    let currentUser;
-    try {
-      currentUser = JSON.parse(session.value);
-    } catch (e) {
-      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
-    }
+    const currentUser = await getSessionUser();
+    if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { oldPassword, newPassword } = await request.json();
 

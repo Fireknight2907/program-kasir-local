@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { createSession } from '@/lib/session';
 
 export async function POST(request) {
   try {
@@ -37,14 +37,7 @@ export async function POST(request) {
     // Remove password from payload
     const { password: _, ...userData } = user;
 
-    const cookieStore = await cookies();
-    cookieStore.set({
-      name: 'user_session',
-      value: JSON.stringify(userData),
-      httpOnly: true,
-      path: '/',
-      maxAge: 60 * 60 * 24, // 1 day
-    });
+    await createSession(user);
 
     return NextResponse.json(userData);
   } catch (error) {

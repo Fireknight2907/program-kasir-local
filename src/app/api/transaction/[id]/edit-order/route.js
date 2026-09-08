@@ -1,10 +1,18 @@
+import { requireStaff } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 export async function PUT(request, { params }) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   const { id } = await params;
   try {
-    const { items } = await request.json();
+    const { items, expectedOrderIds } = await request.json();
+    if (!Array.isArray(expectedOrderIds) ||
+        expectedOrderIds.some(id => !Number.isSafeInteger(id) || id <= 0) ||
+        new Set(expectedOrderIds).size !== expectedOrderIds.length) {
+      return NextResponse.json({ code: 'ORDER_CONFLICT', error: 'Muat ulang halaman kasir dan buka kembali edit pesanan sebelum menyimpan.' }, { status: 409 });
+    }
     if (!Array.isArray(items) || items.some(item =>
       !item || !Number.isSafeInteger(item.menuItemId) || item.menuItemId <= 0 ||
       !Number.isSafeInteger(item.quantity) || item.quantity <= 0 ||
@@ -23,9 +31,17 @@ export async function PUT(request, { params }) {
       // customer orders) wait for this transaction instead of interleaving.
       const activeSession = await tx.transaction.updateMany({
         where: { id, status: { in: ['open', 'ordered'] }, completedAt: null },
-        data: { total: orderTotal, status: items.length > 0 ? 'ordered' : 'open' }
+        data: { total: { increment: 0 } }
       });
       if (activeSession.count === 0) return null;
+
+      // Order IDs change whenever an order is added or an edit replaces it.
+      // Compare only after taking the same session lock as customer ordering.
+      const currentOrders = await tx.order.findMany({ where: { transactionId: id }, select: { id: true } });
+      const expected = new Set(expectedOrderIds);
+      if (currentOrders.length !== expected.size || currentOrders.some(order => !expected.has(order.id))) {
+        return { conflict: true };
+      }
 
       await tx.orderItem.deleteMany({ where: { order: { transactionId: id } } });
       await tx.order.deleteMany({ where: { transactionId: id } });
@@ -35,9 +51,12 @@ export async function PUT(request, { params }) {
         });
       }
       // All changes, including the total, roll back if any step fails.
-      return tx.transaction.findUnique({ where: { id } });
+      return tx.transaction.update({ where: { id }, data: { total: orderTotal, status: items.length > 0 ? 'ordered' : 'open' } });
     });
 
+    if (transaction?.conflict) {
+      return NextResponse.json({ code: 'ORDER_CONFLICT', error: 'Pesanan sudah berubah sejak edit dibuka. Perubahan Anda belum disimpan. Buka kembali Edit Pesanan untuk melihat data terbaru.' }, { status: 409 });
+    }
     if (!transaction) {
       return NextResponse.json({
         code: 'SESSION_CLOSED',

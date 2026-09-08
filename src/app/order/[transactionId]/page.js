@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, use } from 'react';
 import { ShoppingCart, Plus, Minus, CheckCircle, Image as ImageIcon, Utensils, Search, X, ShoppingBag, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 
+import { ORDER_LIMITS } from '@/lib/order-limits';
+import { newOrderRequestId } from '@/lib/order-request';
+
 export default function OrderPage({ params }) {
   const { transactionId } = use(params);
 
@@ -11,6 +14,11 @@ export default function OrderPage({ params }) {
   const [cart, setCart] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const pendingRef = useRef(null);
+  const [pendingOrder, setPendingOrder] = useState(null);
+  const [submitMessage, setSubmitMessage] = useState('');
+  const storageKey = 'pending-order:' + transactionId;
   const [ordered, setOrdered] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,6 +33,13 @@ export default function OrderPage({ params }) {
 
   useEffect(() => {
     const fetchData = async () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+        if (saved?.transactionId === transactionId && saved.requestId && Array.isArray(saved.items)) {
+          pendingRef.current = saved;
+          setPendingOrder(saved);
+        }
+      } catch { /* Sending is blocked later if durable storage is unavailable. */ }
       try {
         const [menuRes, trxRes, catRes] = await Promise.all([
           fetch('/api/menu'),
@@ -84,9 +99,12 @@ export default function OrderPage({ params }) {
   }, [transactionId]);
 
   const updateCart = (item, delta) => {
+    if (submittingRef.current || pendingRef.current) return;
     setCart(prev => {
       const currentQty = prev[item.id]?.quantity || 0;
-      const newQty = Math.max(0, currentQty + delta);
+      const newQty = Math.max(0, Math.min(ORDER_LIMITS.perMenu, currentQty + delta));
+      const currentTotal = Object.values(prev).reduce((sum, value) => sum + value.quantity, 0);
+      if (currentTotal - currentQty + newQty > ORDER_LIMITS.perSubmission) return prev;
 
       const newCart = { ...prev };
       if (newQty === 0) {
@@ -163,50 +181,60 @@ export default function OrderPage({ params }) {
   };
 
   const submitOrder = async () => {
-    if (Object.keys(cart).length === 0) return;
-
+    if (submittingRef.current) return;
+    const items = Object.values(cart).map(item => ({ menuItemId: item.id, quantity: item.quantity }));
+    if (!pendingRef.current && !items.length) return;
+    submittingRef.current = true;
     setSubmitting(true);
+    setSubmitMessage('');
     try {
-      const items = Object.values(cart).map(item => ({
-        menuItemId: item.id,
-        quantity: item.quantity,
-        price: item.price
-      }));
-
+      const payload = pendingRef.current || { transactionId, requestId: newOrderRequestId(), items, isTakeaway };
+      // Persist BEFORE sending. On refresh or uncertain failure reuse the exact payload.
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+      pendingRef.current = payload;
+      setPendingOrder(payload);
       const res = await fetch('/api/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId, items, isTakeaway })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
-
+      const response = await res.json();
       if (res.ok) {
-        try {
-          const trxRes = await fetch(`/api/transaction/${transactionId}`);
-          if (trxRes.ok) {
-            const trxData = await trxRes.json();
-            setTransaction(trxData);
-          }
-        } catch (e) {
-          console.error(e);
-        }
+        localStorage.removeItem(storageKey);
+        pendingRef.current = null;
+        setPendingOrder(null);
+        setCart({});
+        setError('');
         setOrdered(true);
         setShowCartModal(false);
+        try {
+          const trxRes = await fetch('/api/transaction/' + transactionId, { cache: 'no-store' });
+          if (trxRes.ok) setTransaction(await trxRes.json());
+        } catch { /* Receipt confirmed; refreshing the bill can be retried by reload. */ }
+      } else if (res.status >= 500) {
+        setSubmitMessage('Hasil pengiriman belum pasti. Tekan Cek / Kirim Ulang; pesanan yang sama tidak ditambahkan dua kali.');
       } else {
-        const failure = await res.json().catch(() => ({}));
-        if (res.status === 409 && failure.code === 'SESSION_CLOSED') {
-          setCart({});
-          setOrdered(false);
-          setShowCartModal(false);
-          setError(failure.error || 'Sesi meja ini sudah ditutup. Silakan minta QR Code baru kepada kasir.');
-        } else {
-          setError('Gagal mengirim pesanan. Silakan coba lagi.');
-        }
+        // A definite rejection created no order; allow fixing the cart.
+        localStorage.removeItem(storageKey);
+        pendingRef.current = null;
+        setPendingOrder(null);
+        setSubmitMessage(response.error || 'Pesanan ditolak. Periksa pesanan Anda.');
+        if (response.code === 'SESSION_CLOSED') setError(response.error);
       }
-    } catch (err) {
-      setError('Terjadi kesalahan.');
+    } catch {
+      setSubmitMessage('Koneksi atau penyimpanan browser bermasalah. Jika pengiriman belum pasti, gunakan Cek / Kirim Ulang atau hubungi kasir.');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
+
+  if (pendingOrder) return (
+    <div className="container text-center p-6">
+      <h2>{submitting ? 'Memeriksa pengiriman...' : 'Pengiriman belum dikonfirmasi'}</h2>
+      <p>{submitMessage || 'Ada pengiriman yang perlu diperiksa sebelum membuat pesanan baru.'}</p>
+      <button className="btn btn-primary" disabled={submitting} onClick={submitOrder}>Cek / Kirim Ulang</button>
+      <p>Jangan membuat pesanan baru dari tab lain untuk menggantikan pengiriman ini. Jika tetap bermasalah, hubungi kasir.</p>
+    </div>
+  );
 
   if (loading) return (
     <div className="container text-center mt-4 p-6" style={{ textAlign: 'center' }}>
@@ -382,6 +410,8 @@ export default function OrderPage({ params }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)' }}>
+      <p role="status" style={{ padding: '0.75rem', textAlign: 'center' }}>Maksimal {ORDER_LIMITS.perMenu} porsi per menu, {ORDER_LIMITS.perSubmission} porsi per kiriman, dan {ORDER_LIMITS.perSession} porsi per sesi. Pesanan lebih besar: hubungi kasir.</p>
+      {submitMessage && <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c' }}>{submitMessage}</p>}
       {/* Top Header Bar */}
       <div style={{
         position: 'sticky',

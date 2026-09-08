@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { getSessionUser } from '@/lib/session';
 
 // Helper to check if current user is ADMIN
 async function checkAdmin() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get('user_session');
-  if (!session) return false;
-  try {
-    const user = JSON.parse(session.value);
-    return user.role === 'ADMIN';
-  } catch (e) {
-    return false;
-  }
+  return (await getSessionUser())?.role === 'ADMIN';
 }
 
 export async function GET() {

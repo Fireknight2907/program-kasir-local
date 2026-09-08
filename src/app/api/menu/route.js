@@ -1,3 +1,4 @@
+import { requireStaff } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
@@ -13,6 +14,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { name, price, category, image, isAvailable } = body;

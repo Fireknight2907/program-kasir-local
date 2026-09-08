@@ -1,7 +1,10 @@
+import { requireStaff } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 export async function PUT(request, { params }) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   const { id } = await params;
   try {
     const body = await request.json();
@@ -26,6 +29,8 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   const { id } = await params;
   try {
     await prisma.menuItem.delete({

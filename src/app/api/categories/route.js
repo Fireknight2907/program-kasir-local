@@ -1,3 +1,4 @@
+import { requireStaff } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
@@ -54,6 +55,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { name } = body;
@@ -94,6 +97,8 @@ export async function POST(request) {
 }
 
 export async function PUT(request) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { categories } = body; // Array of { id, order }
@@ -127,6 +132,8 @@ export async function PUT(request) {
 }
 
 export async function DELETE(request) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(request.url);
     const idParam = searchParams.get('id');

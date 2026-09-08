@@ -9,7 +9,8 @@ const items = [{ menuItemId: 1, quantity: 3, price: 10000 }];
 
 function setup(status = 'ordered', failCreate = false) {
   let state = { session: { id: 'A', status, completedAt: status === 'completed' ? 'closed' : null, total: 10000 },
-    orders: [{ transactionId: 'A', total: 10000, items: { create: [{ menuItemId: 1, quantity: 1, price: 10000 }] } }] };
+    orders: [{ id: 1, transactionId: 'A', total: 10000, items: { create: [{ menuItemId: 1, quantity: 1, price: 10000 }] } }] };
+  let nextOrderId = 2;
   let tail = Promise.resolve();
   const prisma = { $transaction: async callback => {
     // Emulate the DB session row lock, acquired by updateMany, not callback entry.
@@ -25,19 +26,20 @@ function setup(status = 'ordered', failCreate = false) {
             draft = structuredClone(state);
             const s = draft.session;
             if (where.id !== s.id || !where.status.in.includes(s.status) || s.completedAt !== where.completedAt) return { count: 0 };
-            Object.assign(s, data);
+            s.total += data.total.increment;
             return { count: 1 };
           },
-          async findUnique() { requireLock(); return draft.session; }
+          async update({ data }) { requireLock(); Object.assign(draft.session, data); return draft.session; }
         },
         orderItem: { async deleteMany() { requireLock(); } },
         order: {
+          async findMany() { requireLock(); return draft.orders.map(o => ({ id: o.id })); },
           async deleteMany() { requireLock(); draft.orders = []; },
           async create({ data }) {
             requireLock();
             await new Promise(resolve => setImmediate(resolve));
             if (failCreate) throw new Error('Simulated write failure');
-            draft.orders.push(data);
+            draft.orders.push({ id: nextOrderId++, ...data });
             return data;
           }
         }
@@ -46,15 +48,16 @@ function setup(status = 'ordered', failCreate = false) {
       return result;
     } finally { if (unlock) unlock(); }
   } };
-  const context = vm.createContext({ prisma, NextResponse: { json: (body, opts = {}) => ({ body, status: opts.status || 200 }) }, console: { error() {} } });
+  const context = vm.createContext({ prisma, requireStaff: async () => null, NextResponse: { json: (body, opts = {}) => ({ body, status: opts.status || 200 }) }, console: { error() {} } });
   vm.runInContext(source, context);
-  return { send: (value = items) => context.PUT({ json: async () => ({ items: value }) }, { params: Promise.resolve({ id: 'A' }) }), state: () => state };
+  return { send: (value = items, expectedOrderIds = [1]) => context.PUT({ json: async () => ({ items: value, expectedOrderIds }) }, { params: Promise.resolve({ id: 'A' }) }), state: () => state };
 }
 
 test('20 overlapping identical saves leave one order and matching total', async () => {
   const app = setup();
   const responses = await Promise.all(Array.from({ length: 20 }, () => app.send()));
-  assert.ok(responses.every(r => r.status === 200));
+  assert.equal(responses.filter(r => r.status === 200).length, 1);
+  assert.equal(responses.filter(r => r.status === 409 && r.body.code === 'ORDER_CONFLICT').length, 19);
   assert.equal(app.state().orders.length, 1);
   assert.equal(app.state().session.total, 30000);
   assert.equal(app.state().orders[0].items.create[0].quantity, 3);
@@ -117,4 +120,34 @@ test('rapid clicks issue one save, and saving lock releases after failure', asyn
   release({ ok: true });
   await retry;
   assert.equal(context.editOrderSavingRef.current, false);
+});
+
+
+test('stale edit preserves a customer order received after modal opened', async () => {
+  const app = setup();
+  app.state().orders.push({ id: 2, transactionId: 'A', total: 10000, items: { create: [{ menuItemId: 2, quantity: 1, price: 10000 }] } });
+  app.state().session.total = 20000;
+  const before = structuredClone(app.state());
+  const response = await app.send(items, [1]);
+  assert.equal(response.status, 409);
+  assert.equal(response.body.code, 'ORDER_CONFLICT');
+  assert.deepEqual(app.state(), before);
+});
+test('stale edit cannot clear newly received items', async () => {
+  const app = setup();
+  const before = structuredClone(app.state());
+  assert.equal((await app.send([], [])).status, 409);
+  assert.deepEqual(app.state(), before);
+});
+test('refreshing snapshot permits deliberate edits after conflict', async () => {
+  const app = setup();
+  assert.equal((await app.send()).status, 200);
+  assert.equal((await app.send()).status, 409);
+  assert.equal((await app.send(items, app.state().orders.map(o => o.id))).status, 200);
+});
+test('old client without order snapshot cannot overwrite orders', async () => {
+  const app = setup();
+  const before = structuredClone(app.state());
+  assert.equal((await app.send(items, null)).status, 409);
+  assert.deepEqual(app.state(), before);
 });
