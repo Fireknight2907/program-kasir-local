@@ -1,0 +1,179 @@
+{
+  "date": "2026-09-09",
+  "findings": [
+    {
+      "name": "live_database_acl",
+      "tables": [
+        {
+          "table_name": "Category",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "LoginThrottle",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "MenuItem",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "Order",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "OrderItem",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "OrderSubmission",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "Transaction",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        },
+        {
+          "table_name": "User",
+          "rls_enabled": false,
+          "anon_select": true,
+          "anon_insert": true,
+          "anon_update": true,
+          "anon_delete": true
+        }
+      ]
+    },
+    {
+      "name": "live_storage_policies",
+      "policies": [
+        {
+          "policyname": "Izinkan upload foto menu",
+          "roles": [
+            "public"
+          ],
+          "cmd": "INSERT",
+          "qual": null,
+          "with_check": "(bucket_id = 'menu-images'::text)"
+        }
+      ],
+      "serviceKeyConfigured": false
+    },
+    {
+      "name": "anonymous_empty_read",
+      "table": "User",
+      "status": 200
+    },
+    {
+      "name": "anonymous_empty_read",
+      "table": "Transaction",
+      "status": 200
+    },
+    {
+      "name": "anonymous_empty_read",
+      "table": "OrderSubmission",
+      "status": 200
+    },
+    {
+      "name": "negative_menu_price",
+      "status": 200,
+      "savedPrice": -10000
+    },
+    {
+      "name": "negative_price_edit_reduces_bill",
+      "status": 200,
+      "totalBefore": 50000,
+      "totalAfter": 40000,
+      "newOrderTotals": [
+        50000,
+        -10000
+      ]
+    },
+    {
+      "name": "served_order_requeued_without_delta",
+      "status": 200,
+      "priorKitchenStatus": "served",
+      "priorQuantity": 1,
+      "newKitchenStatus": "queued",
+      "newDisplayedQuantity": 2,
+      "acceptedAt": null,
+      "deltaFieldPresent": false
+    },
+    {
+      "name": "database_fixture_cleanup",
+      "rolledBack": true
+    },
+    {
+      "name": "midnight_revenue_uses_opening_day",
+      "localOpened": "2026-09-08 23:50 UTC+8",
+      "localPaid": "2026-09-09 00:10 UTC+8",
+      "results": [
+        {
+          "date": "2026-09-08",
+          "count": 1,
+          "revenue": 20000
+        },
+        {
+          "date": "2026-09-09",
+          "count": 0,
+          "revenue": 0
+        }
+      ]
+    },
+    {
+      "name": "recap_mixed_price_label",
+      "quantity": 2,
+      "displayedUnitPrice": 20000,
+      "revenue": 50000
+    },
+    {
+      "name": "public_transaction_internal_fields",
+      "status": 200,
+      "exposedFields": [
+        "paidById",
+        "paymentRequestId",
+        "paymentMethod"
+      ],
+      "requiresKnownId": true
+    },
+    {
+      "name": "cashier_archive_scope",
+      "status": 200,
+      "queryWhere": {},
+      "role": "KASIR",
+      "authStub": "requireStaff allowed; route has no admin check"
+    },
+    {
+      "name": "takeaway_creation_retry_not_idempotent",
+      "createRequests": 2,
+      "pendingSavedBeforeFirstCreate": false,
+      "scenario": "response lost after session creation; order not yet submitted"
+    }
+  ]
+}

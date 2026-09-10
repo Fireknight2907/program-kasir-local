@@ -8,6 +8,9 @@ import {
   Receipt, Image as ImageIcon, Trash2, Edit3, Upload, X, Search, QrCode, Users, Key, User, ChevronDown, ChevronUp, Sliders, FileText, Download, Calendar, Clock, GripVertical, CheckCircle, BarChart3, TrendingUp, Timer, Award, ShoppingBag, ShoppingCart, Minus, Banknote, Smartphone, CreditCard, Flame, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Filter
 } from 'lucide-react';
 
+import AccountModal from '@/components/AccountModal';
+import ForcePasswordChange from '@/components/ForcePasswordChange';
+import KitchenPanel from '@/components/KitchenPanel';
 import { newOrderRequestId } from '@/lib/order-request';
 
 export default function CashierDashboard() {
@@ -101,7 +104,13 @@ export default function CashierDashboard() {
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState(null);
-  const [employeeFormData, setEmployeeFormData] = useState({ username: '', password: '', name: '', ttl: '', phone: '', address: '' });
+  const paymentBusyRef = useRef(false);
+  const paymentRequestRef = useRef(null);
+  const transactionFetchRef = useRef(false);
+  const [syncError, setSyncError] = useState('');
+  const [lastSynced, setLastSynced] = useState(null);
+  const [extraItemTakeaway, setExtraItemTakeaway] = useState(false);
+  const [employeeFormData, setEmployeeFormData] = useState({ username: '', password: '', name: '', ttl: '', phone: '', address: '', role: 'KASIR' });
   const [employeeError, setEmployeeError] = useState('');
 
   // Change Password State
@@ -165,20 +174,25 @@ export default function CashierDashboard() {
 
   // Fetch transactions for today
   const fetchTransactions = async () => {
+    if (transactionFetchRef.current) return;
+    transactionFetchRef.current = true;
     setLoadingTransactions(true);
     try {
       const today = getLocalDateString();
       const res = await fetch(`/api/transaction?date=${today}&tab=active`, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000)
       });
       const data = await res.json();
+      if (!res.ok || !Array.isArray(data)) throw new Error(data.error || 'Gagal memperbarui pesanan.');
       if (Array.isArray(data)) {
         setTransactions(data);
+        setSyncError(''); setLastSynced(new Date());
       }
     } catch (e) {
-      console.error(e);
+      setSyncError('Koneksi bermasalah. Data yang tampil mungkin belum terbaru. Periksa koneksi dan hubungi kitchen.');
     }
+    transactionFetchRef.current = false;
     setLoadingTransactions(false);
   };
 
@@ -248,7 +262,7 @@ export default function CashierDashboard() {
     // Initialize itemMap with all items from menuList so unsold menu items (0 porsi) are included
     if (menuList && Array.isArray(menuList)) {
       menuList.forEach(m => {
-        itemMap[m.name] = {
+        itemMap[m.id] = {
           id: m.id,
           name: m.name,
           category: m.category || 'Lainnya',
@@ -365,14 +379,15 @@ export default function CashierDashboard() {
 
             order.items.forEach(item => {
               const name = item.menuItem?.name || 'Item Tidak Dikenal';
+              const menuId = item.menuItemId;
               const category = item.menuItem?.category || 'Lainnya';
               const qty = Number(item.quantity) || 0;
               const price = Number(item.price) || 0;
               const itemTotal = qty * price;
               const image = item.menuItem?.image || null;
 
-              if (!itemMap[name]) {
-                itemMap[name] = {
+              if (!itemMap[menuId]) {
+                itemMap[menuId] = {
                   id: item.menuItemId || name,
                   name,
                   category,
@@ -384,12 +399,13 @@ export default function CashierDashboard() {
                 };
               }
 
-              itemMap[name].quantity += qty;
-              itemMap[name].totalRevenue += itemTotal;
-              if (image && !itemMap[name].image) {
-                itemMap[name].image = image;
+              itemMap[menuId].quantity += qty;
+              itemMap[menuId].totalRevenue += itemTotal;
+              itemMap[menuId].unitPrice = itemMap[menuId].totalRevenue / itemMap[menuId].quantity;
+              if (image && !itemMap[menuId].image) {
+                itemMap[menuId].image = image;
               }
-              itemsInThisOrder.add(name);
+              itemsInThisOrder.add(menuId);
 
               tableMap[rawTable].totalItemsQuantity += qty;
 
@@ -400,8 +416,8 @@ export default function CashierDashboard() {
               hourlyMap[h].tablesMap[rawTable].totalItemsQuantity += qty;
               hourlyMap[h].tablesMap[rawTable].totalRevenue += itemTotal;
 
-              if (!hourlyMap[h].itemsMap[name]) {
-                hourlyMap[h].itemsMap[name] = {
+              if (!hourlyMap[h].itemsMap[menuId]) {
+                hourlyMap[h].itemsMap[menuId] = {
                   name,
                   category,
                   quantity: 0,
@@ -410,8 +426,9 @@ export default function CashierDashboard() {
                   image,
                 };
               }
-              hourlyMap[h].itemsMap[name].quantity += qty;
-              hourlyMap[h].itemsMap[name].totalRevenue += itemTotal;
+              hourlyMap[h].itemsMap[menuId].quantity += qty;
+              hourlyMap[h].itemsMap[menuId].totalRevenue += itemTotal;
+              hourlyMap[h].itemsMap[menuId].unitPrice = hourlyMap[h].itemsMap[menuId].totalRevenue / hourlyMap[h].itemsMap[menuId].quantity;
             });
 
             itemsInThisOrder.forEach(itemName => {
@@ -539,12 +556,14 @@ export default function CashierDashboard() {
               const qty = Number(item.quantity) || 0;
               const price = Number(item.price) || 0;
               const itemTotal = qty * price;
+              const key = item.menuItemId + ':' + price;
 
               totalItemsSold += qty;
               totalRevenue += itemTotal;
 
-              if (!itemMap[name]) {
-                itemMap[name] = {
+              if (!itemMap[key]) {
+                itemMap[key] = {
+                  id: item.menuItemId,
                   name,
                   category: item.menuItem?.category || 'Lainnya',
                   quantity: 0,
@@ -552,8 +571,8 @@ export default function CashierDashboard() {
                   unitPrice: price,
                 };
               }
-              itemMap[name].quantity += qty;
-              itemMap[name].totalRevenue += itemTotal;
+              itemMap[key].quantity += qty;
+              itemMap[key].totalRevenue += itemTotal;
             });
           }
         });
@@ -864,7 +883,7 @@ export default function CashierDashboard() {
       fetchMenu();
       fetchCategories();
       const interval = setInterval(() => {
-        if (activeTab === 'transactions') fetchTransactions();
+        fetchTransactions();
       }, 5000);
       return () => clearInterval(interval);
     }
@@ -883,7 +902,7 @@ export default function CashierDashboard() {
   }, [statsDate]);
 
   useEffect(() => {
-    if (activeTab === 'stats' && currentUser) {
+    if (activeTab === 'stats' && currentUser?.role === 'ADMIN') {
       fetchStats();
     }
   }, [activeTab, statsDate, currentUser]);
@@ -906,35 +925,11 @@ export default function CashierDashboard() {
     }
   }, [activeTab, currentUser]);
 
-  const handleSaveEmployee = async (e) => {
-    e.preventDefault();
-    setEmployeeError('');
-    try {
-      const isEditing = !!editingEmployeeId;
-      const url = isEditing ? `/api/users/${editingEmployeeId}` : '/api/users';
-      const method = isEditing ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(employeeFormData)
-      });
-      if (res.ok) {
-        setShowEmployeeModal(false);
-        fetchEmployees();
-      } else {
-        const data = await res.json();
-        setEmployeeError(data.error || 'Gagal menyimpan data karyawan');
-      }
-    } catch (err) {
-      setEmployeeError('Terjadi kesalahan');
-    }
-  };
-
   const handleDeleteEmployee = async (id) => {
     if (!confirm('Hapus karyawan ini secara permanen?')) return;
     try {
-      await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      if (!res.ok) { const data = await res.json(); alert(data.error || 'Akun gagal dihapus.'); return; }
       fetchEmployees();
     } catch (e) {
       console.error(e);
@@ -1125,13 +1120,16 @@ export default function CashierDashboard() {
   };
 
   const openPaymentModal = (trx) => {
+    if (paymentBusyRef.current) return;
+    paymentRequestRef.current = newOrderRequestId();
     setPaymentTransaction(trx);
     setSelectedPaymentMethod('CASH');
     setShowPaymentModal(true);
   };
 
   const confirmCompleteTransaction = async () => {
-    if (!paymentTransaction) return;
+    if (!paymentTransaction || paymentBusyRef.current) return;
+    paymentBusyRef.current = true;
     setSubmittingPayment(true);
     try {
       const res = await fetch(`/api/transaction/${paymentTransaction.id}`, {
@@ -1139,12 +1137,16 @@ export default function CashierDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'completed',
-          paymentMethod: selectedPaymentMethod
+          paymentMethod: selectedPaymentMethod,
+          expectedRevision: paymentTransaction.revision,
+          expectedTotal: paymentTransaction.total,
+          paymentRequestId: paymentRequestRef.current
         })
       });
       if (!res.ok) {
         const failure = await res.json().catch(() => ({}));
         alert(failure.error || 'Pembayaran gagal disimpan.');
+        if (res.status === 409) { setShowPaymentModal(false); await fetchTransactions(); }
         if (res.status === 401) router.push('/login');
         return;
       }
@@ -1157,6 +1159,7 @@ export default function CashierDashboard() {
       console.error(e);
       alert('Koneksi bermasalah. Periksa status transaksi sebelum mencoba kembali.');
     } finally {
+      paymentBusyRef.current = false;
       setSubmittingPayment(false);
     }
   };
@@ -1186,28 +1189,30 @@ export default function CashierDashboard() {
   const cancelTransaction = async (id) => {
     if (!confirm('Yakin ingin membatalkan pesanan ini?')) return;
     try {
-      await fetch(`/api/transaction/${id}`, {
+      const res = await fetch(`/api/transaction/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'cancelled' })
       });
+      if (!res.ok) { const data = await res.json(); alert(data.error || 'Perubahan gagal disimpan.'); return; }
       if (activeTab === 'transactions') fetchTransactions();
       if (activeTab === 'archive') fetchArchive();
     } catch (e) {
-      console.error(e);
+      alert('Koneksi bermasalah. Muat ulang dan periksa status transaksi.');
     }
   };
 
   const deleteTransaction = async (id) => {
     if (!confirm('Yakin ingin menghapus transaksi ini secara permanen? Data tidak dapat dikembalikan.')) return;
     try {
-      await fetch(`/api/transaction/${id}`, {
+      const res = await fetch(`/api/transaction/${id}`, {
         method: 'DELETE',
       });
+      if (!res.ok) { const data = await res.json(); alert(data.error || 'Perubahan gagal disimpan.'); return; }
       if (activeTab === 'transactions') fetchTransactions();
       if (activeTab === 'archive') fetchArchive();
     } catch (e) {
-      console.error(e);
+      alert('Koneksi bermasalah. Muat ulang dan periksa status transaksi.');
     }
   };
 
@@ -1228,48 +1233,25 @@ export default function CashierDashboard() {
   const openEditOrderModal = (trx) => {
     if (editOrderSavingRef.current) return;
     setEditingTransaction(trx);
-    const consolidated = [];
-    trx.orders?.forEach(order => {
-      order.items?.forEach(item => {
-        const existing = consolidated.find(c => c.menuItem.id === item.menuItem.id);
-        if (existing) {
-          existing.quantity += item.quantity;
-        } else {
-          consolidated.push({
-            menuItem: item.menuItem,
-            quantity: item.quantity,
-            price: item.price
-          });
-        }
-      });
-    });
-    setEditingOrderItems(consolidated);
+    setEditingOrderItems((trx.orders || []).flatMap(order => (order.items || []).map(item => ({
+      rowKey: 'existing:' + item.id, itemId: item.id, menuItem: item.menuItem,
+      quantity: item.quantity, price: item.price, isTakeaway: order.isTakeaway, orderId: order.id
+    }))));
+    setExtraItemTakeaway(trx.tableNumber?.toLowerCase().startsWith('take away') || false);
     setEditOrderSearch('');
     setShowEditOrderModal(true);
   };
 
-  const updateEditingQuantity = (menuItemId, delta) => {
+  const updateEditingQuantity = (rowKey, delta) => {
     if (editOrderSavingRef.current) return;
-    setEditingOrderItems(prev => {
-      return prev.map(item => {
-        if (item.menuItem.id === menuItemId) {
-          return { ...item, quantity: item.quantity + delta };
-        }
-        return item;
-      }).filter(item => item.quantity > 0);
-    });
+    setEditingOrderItems(prev => prev.map(item => item.rowKey === rowKey ? {...item, quantity: Math.min(1000, item.quantity + delta)} : item).filter(item => item.quantity > 0));
   };
-
   const addNewItemToEditing = (menuItem) => {
     if (editOrderSavingRef.current) return;
-    setEditingOrderItems(prev => {
-      const existing = prev.find(item => item.menuItem.id === menuItem.id);
-      if (existing) {
-        return prev.map(item => item.menuItem.id === menuItem.id ? { ...item, quantity: item.quantity + 1 } : item);
-      } else {
-        return [...prev, { menuItem, quantity: 1, price: menuItem.price }];
-      }
-    });
+    const rowKey = 'new:' + menuItem.id + ':' + extraItemTakeaway;
+    setEditingOrderItems(prev => prev.some(item => item.rowKey === rowKey)
+      ? prev.map(item => item.rowKey === rowKey ? {...item, quantity: Math.min(1000, item.quantity + 1)} : item)
+      : [...prev, {rowKey, menuItem, quantity: 1, price: menuItem.price, isTakeaway: extraItemTakeaway}]);
   };
 
   const handleSaveEditOrder = async () => {
@@ -1279,11 +1261,12 @@ export default function CashierDashboard() {
     setSavingEditOrder(true);
     try {
       const payload = {
-        expectedOrderIds: (editingTransaction.orders || []).map(order => order.id),
+        expectedRevision: editingTransaction.revision,
         items: editingOrderItems.map(item => ({
           menuItemId: item.menuItem.id,
           quantity: item.quantity,
-          price: item.price
+          itemId: item.itemId,
+          isTakeaway: item.isTakeaway
         }))
       };
       const res = await fetch(`/api/transaction/${editingTransaction.id}/edit-order`, {
@@ -1439,6 +1422,8 @@ export default function CashierDashboard() {
     }
   };
 
+  if (currentUser?.mustChangePassword) return <ForcePasswordChange />;
+
   if (checkingAuth) {
     return (
       <div className="container text-center mt-4">
@@ -1469,6 +1454,7 @@ export default function CashierDashboard() {
 
   return (
     <div>
+      <div role={syncError?'alert':'status'} style={{padding:'10px 16px',borderRadius:10,marginBottom:12,background:syncError?'#ef444420':'#10b98110',fontSize:'.85rem'}}>{syncError || (lastSynced ? 'Pesanan diperbarui ' + lastSynced.toLocaleTimeString('id-ID') + ' · otomatis setiap 5 detik' : 'Menghubungkan daftar pesanan…')}</div>
       {/* Top Header Bar */}
       <div className="header-bar">
         <div>
@@ -1518,6 +1504,7 @@ export default function CashierDashboard() {
 
       {/* Navigation Tabs */}
       <div className="flex gap-4 mb-4" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+        <button className={activeTab === 'kitchen' ? 'btn btn-primary' : 'btn btn-outline'} onClick={() => setActiveTab('kitchen')}>Kitchen</button>
         <button
           className={`btn ${activeTab === 'transactions' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setActiveTab('transactions')}
@@ -1534,19 +1521,23 @@ export default function CashierDashboard() {
           </button>
         )}
 
+        {currentUser?.role === 'ADMIN' && (
         <button
           className={`btn ${activeTab === 'stats' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setActiveTab('stats')}
         >
           <BarChart3 size={18} style={{ marginRight: '8px' }} /> Statistik Meja
         </button>
+        )}
 
+        {currentUser?.role === 'ADMIN' && (
         <button
           className={`btn ${activeTab === 'menu' ? 'btn-primary' : 'btn-outline'}`}
           onClick={() => setActiveTab('menu')}
         >
           <Utensils size={18} style={{ marginRight: '8px' }} /> Kelola Menu & Foto
         </button>
+        )}
 
         {currentUser?.role === 'ADMIN' && (
           <button
@@ -1559,6 +1550,7 @@ export default function CashierDashboard() {
       </div>
 
       {/* TAB 1: TRANSAKSI & QR */}
+      {activeTab === 'kitchen' && <KitchenPanel />}
       {activeTab === 'transactions' && (
         <div>
           <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
@@ -2056,7 +2048,7 @@ export default function CashierDashboard() {
                       Selesaikan transaksi untuk {paymentTransaction.tableNumber?.toLowerCase().includes('take away') ? paymentTransaction.tableNumber : `Meja ${paymentTransaction.tableNumber || '-'}`}
                     </p>
                   </div>
-                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowPaymentModal(false)}>
+                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} disabled={submittingPayment} onClick={() => { if (!paymentBusyRef.current) setShowPaymentModal(false); }}>
                     <X size={18} />
                   </button>
                 </div>
@@ -2080,7 +2072,7 @@ export default function CashierDashboard() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
                   {/* Option 1: Cash */}
                   <div
-                    onClick={() => setSelectedPaymentMethod('CASH')}
+                    onClick={() => { if (!paymentBusyRef.current) setSelectedPaymentMethod('CASH'); }}
                     style={{
                       border: selectedPaymentMethod === 'CASH' ? '2px solid #10b981' : '1px solid var(--border-color)',
                       background: selectedPaymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.08)' : 'var(--card-bg)',
@@ -2106,14 +2098,14 @@ export default function CashierDashboard() {
                       type="radio"
                       name="paymentMethod"
                       checked={selectedPaymentMethod === 'CASH'}
-                      onChange={() => setSelectedPaymentMethod('CASH')}
+                      onChange={() => { if (!paymentBusyRef.current) setSelectedPaymentMethod('CASH'); }}
                       style={{ accentColor: '#10b981', width: '18px', height: '18px' }}
                     />
                   </div>
 
                   {/* Option 2: QRIS */}
                   <div
-                    onClick={() => setSelectedPaymentMethod('QRIS')}
+                    onClick={() => { if (!paymentBusyRef.current) setSelectedPaymentMethod('QRIS'); }}
                     style={{
                       border: selectedPaymentMethod === 'QRIS' ? '2px solid #3b82f6' : '1px solid var(--border-color)',
                       background: selectedPaymentMethod === 'QRIS' ? 'rgba(59, 130, 246, 0.08)' : 'var(--card-bg)',
@@ -2139,14 +2131,14 @@ export default function CashierDashboard() {
                       type="radio"
                       name="paymentMethod"
                       checked={selectedPaymentMethod === 'QRIS'}
-                      onChange={() => setSelectedPaymentMethod('QRIS')}
+                      onChange={() => { if (!paymentBusyRef.current) setSelectedPaymentMethod('QRIS'); }}
                       style={{ accentColor: '#3b82f6', width: '18px', height: '18px' }}
                     />
                   </div>
 
                   {/* Option 3: Card */}
                   <div
-                    onClick={() => setSelectedPaymentMethod('CARD')}
+                    onClick={() => { if (!paymentBusyRef.current) setSelectedPaymentMethod('CARD'); }}
                     style={{
                       border: selectedPaymentMethod === 'CARD' ? '2px solid #8b5cf6' : '1px solid var(--border-color)',
                       background: selectedPaymentMethod === 'CARD' ? 'rgba(139, 92, 246, 0.08)' : 'var(--card-bg)',
@@ -2172,7 +2164,7 @@ export default function CashierDashboard() {
                       type="radio"
                       name="paymentMethod"
                       checked={selectedPaymentMethod === 'CARD'}
-                      onChange={() => setSelectedPaymentMethod('CARD')}
+                      onChange={() => { if (!paymentBusyRef.current) setSelectedPaymentMethod('CARD'); }}
                       style={{ accentColor: '#8b5cf6', width: '18px', height: '18px' }}
                     />
                   </div>
@@ -2180,7 +2172,7 @@ export default function CashierDashboard() {
 
                 {/* Actions */}
                 <div className="flex gap-3 justify-between">
-                  <button type="button" className="btn btn-outline" style={{ width: '35%' }} onClick={() => setShowPaymentModal(false)}>
+                  <button type="button" className="btn btn-outline" style={{ width: '35%' }} disabled={submittingPayment} onClick={() => { if (!paymentBusyRef.current) setShowPaymentModal(false); }}>
                     Batal
                   </button>
                   <button
@@ -2294,21 +2286,21 @@ export default function CashierDashboard() {
                 <div className="flex flex-col md:flex-row gap-6 overflow-hidden" style={{ flex: 1 }}>
                   {/* Left Column: Current Order Items */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                    <h4 style={{ marginBottom: '0.5rem' }}>Daftar Pesanan Saat Ini</h4>
+                    <h4 style={{ marginBottom: '0.5rem' }}>Daftar Pesanan Saat Ini</h4><p style={{fontSize:'.8rem',marginBottom:12}}>Harga pesanan lama tetap. Perubahan jumlah dikirim kembali untuk dikonfirmasi kitchen.</p><label style={{fontSize:'.85rem',marginBottom:12}}><input type="checkbox" checked={extraItemTakeaway} onChange={e=>setExtraItemTakeaway(e.target.checked)} disabled={savingEditOrder}/> Tambahan menu baru dibungkus</label>
                     {editingOrderItems.length === 0 ? (
                       <p style={{ opacity: 0.7, fontStyle: 'italic' }}>Belum ada item pesanan.</p>
                     ) : (
                       <div className="flex flex-col gap-2">
                         {editingOrderItems.map(item => (
-                          <div key={item.menuItem.id} className="flex justify-between items-center p-2" style={{ background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <div key={item.rowKey} className="flex justify-between items-center p-2" style={{ background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                             <div style={{ flex: 1 }}>
                               <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>{item.menuItem.name}</p>
-                              <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.8 }}>Rp {item.price.toLocaleString('id-ID')} / item</p>
+                              <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.8 }}>Rp {item.price.toLocaleString('id-ID')} / item · {item.isTakeaway ? 'Bungkus' : 'Makan di tempat'} · {item.itemId ? 'Pesanan #' + item.orderId : 'Tambahan baru'}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.menuItem.id, -1)}>-</button>
+                              <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.rowKey, -1)}>-</button>
                               <span style={{ fontWeight: 700, minWidth: '1.5rem', textAlign: 'center' }}>{item.quantity}</span>
-                              <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.menuItem.id, 1)}>+</button>
+                              <button disabled={savingEditOrder} className="btn btn-outline" style={{ padding: '0.1rem 0.4rem' }} onClick={() => updateEditingQuantity(item.rowKey, 1)}>+</button>
                             </div>
                           </div>
                         ))}
@@ -2700,7 +2692,7 @@ export default function CashierDashboard() {
       )}
 
       {/* TAB STATISTIK MEJA, ORDER & PERPUTARAN */}
-      {activeTab === 'stats' && (() => {
+      {currentUser?.role === 'ADMIN' && activeTab === 'stats' && (() => {
         const stats = calculateTableStats();
         const formattedDateStr = statsDate
           ? new Date(statsDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -2849,7 +2841,7 @@ export default function CashierDashboard() {
                         {formatDuration(stats.avgDurationMsOverall)}
                       </h3>
                       <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.7 }}>
-                        Rata-rata waktu terisi -> selesai
+                        Rata-rata waktu terisi → selesai
                       </p>
                     </div>
                   </div>
@@ -3160,7 +3152,7 @@ export default function CashierDashboard() {
                                 <th style={{ padding: '0.85rem 1rem' }}>Nama Makanan / Item</th>
                                 <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Total Terjual (Porsi)</th>
                                 <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Frekuensi Dipesan</th>
-                                <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Harga Satuan</th>
+                                <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Harga Rata-rata</th>
                                 <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Total Revenue (Rp)</th>
                                 <th style={{ padding: '0.85rem 1rem', width: '200px' }}>Kontribusi Revenue (%)</th>
                               </tr>
@@ -3562,7 +3554,7 @@ export default function CashierDashboard() {
       })()}
 
       {/* TAB 2: KELOLA MENU & FOTO */}
-      {activeTab === 'menu' && (
+      {currentUser?.role === 'ADMIN' && activeTab === 'menu' && (
         <div>
           <div className="flex justify-between items-center mb-4" style={{ flexWrap: 'wrap', gap: '1rem' }}>
             <h2>Daftar Menu Restoran</h2>
@@ -3848,14 +3840,14 @@ export default function CashierDashboard() {
       {activeTab === 'employees' && currentUser?.role === 'ADMIN' && (
         <div>
           <div className="flex justify-between items-center mb-4">
-            <h2>Manajemen Karyawan & Kasir</h2>
+            <h2>Pengelolaan Akun</h2>
             <button className="btn btn-primary" onClick={() => {
               setEditingEmployeeId(null);
-              setEmployeeFormData({ username: '', password: '', name: '', ttl: '', phone: '', address: '' });
+              setEmployeeFormData({ username: '', password: '', name: '', ttl: '', phone: '', address: '', role: 'KASIR' });
               setEmployeeError('');
               setShowEmployeeModal(true);
             }}>
-              <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Kasir Baru
+              <Plus size={18} style={{ marginRight: '8px' }} /> Tambah Akun
             </button>
           </div>
 
@@ -3884,6 +3876,7 @@ export default function CashierDashboard() {
                       setEditingEmployeeId(emp.id);
                       setEmployeeFormData({
                         username: emp.username,
+                        role: emp.role,
                         password: '', // Blank when editing
                         name: emp.name || '',
                         ttl: emp.ttl || '',
@@ -3895,7 +3888,7 @@ export default function CashierDashboard() {
                     }}>
                       <Edit3 size={16} style={{ marginRight: '6px' }} /> Edit Data
                     </button>
-                    {emp.role !== 'ADMIN' && (
+                    {emp.id !== currentUser?.id && (
                       <button className="btn btn-danger" style={{ flex: 1, padding: '0.4rem' }} onClick={() => handleDeleteEmployee(emp.id)}>
                         <Trash2 size={16} style={{ marginRight: '6px' }} /> Hapus
                       </button>
@@ -3906,50 +3899,7 @@ export default function CashierDashboard() {
             </div>
           )}
 
-          {/* Modal Add Employee */}
-          {showEmployeeModal && (
-            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-              <div className="glass-card" style={{ width: '100%', maxWidth: '500px', background: 'var(--bg-color)', maxHeight: '90vh', overflowY: 'auto' }}>
-                <div className="flex justify-between items-center mb-4">
-                  <h3>{editingEmployeeId ? 'Edit Data Karyawan' : 'Tambah Akun Karyawan (Kasir)'}</h3>
-                  <button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowEmployeeModal(false)}><X size={18} /></button>
-                </div>
-                {employeeError && <div style={{ padding: '0.6rem', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>{employeeError}</div>}
-                <form onSubmit={handleSaveEmployee} className="flex flex-col gap-3">
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Nama Lengkap *</label>
-                    <input type="text" className="input" value={employeeFormData.name} onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })} required />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Username Login *</label>
-                    <input type="text" className="input" placeholder="contoh: budi_kasir" value={employeeFormData.username} onChange={(e) => setEmployeeFormData({ ...employeeFormData, username: e.target.value.toLowerCase() })} required />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Password {editingEmployeeId ? '(Kosongkan jika tidak ingin diubah)' : 'Awal (Default: kasir123)'}</label>
-                    <input type="text" className="input" placeholder={editingEmployeeId ? "Kosongkan jika tetap" : "kasir123"} value={employeeFormData.password} onChange={(e) => setEmployeeFormData({ ...employeeFormData, password: e.target.value })} />
-                  </div>
-                  <div className="grid grid-cols-2" style={{ gap: '1rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Tempat, Tanggal Lahir</label>
-                      <input type="text" className="input" placeholder="Jakarta, 12 Mei 1998" value={employeeFormData.ttl} onChange={(e) => setEmployeeFormData({ ...employeeFormData, ttl: e.target.value })} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>No Handphone</label>
-                      <input type="text" className="input" placeholder="0812..." value={employeeFormData.phone} onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })} />
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600 }}>Alamat Lengkap</label>
-                    <textarea className="input" rows={2} value={employeeFormData.address} onChange={(e) => setEmployeeFormData({ ...employeeFormData, address: e.target.value })} />
-                  </div>
-                  <div className="flex gap-4 justify-between mt-2">
-                    <button type="button" className="btn btn-outline" style={{ width: '40%' }} onClick={() => setShowEmployeeModal(false)}>Batal</button>
-                    <button type="submit" className="btn btn-primary" style={{ width: '60%' }}>Simpan Akun</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
+          {showEmployeeModal && <AccountModal initialValue={employeeFormData} editingId={editingEmployeeId} currentUserId={currentUser?.id} onClose={() => setShowEmployeeModal(false)} onSaved={async () => { await fetchEmployees(); setShowEmployeeModal(false); }} />}
         </div>
       )}
 

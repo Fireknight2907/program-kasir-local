@@ -1,58 +1,20 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getSessionUser } from '@/lib/session';
-
-// Helper to check if current user is ADMIN
-async function checkAdmin() {
-  return (await getSessionUser())?.role === 'ADMIN';
+import { requireAdmin } from '@/lib/session';
+import { accountData } from '@/lib/account-policy';
+import bcrypt from 'bcryptjs';
+export async function GET(request) {
+  const denied = await requireAdmin(request); if (denied) return denied;
+  try { const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' } }); return NextResponse.json(users.map(({password, ...user}) => user)); }
+  catch { return NextResponse.json({error:'Gagal memuat akun.'}, {status:500}); }
 }
-
-export async function GET() {
-  if (!(await checkAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-  
-  try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
-    // Don't send passwords to frontend
-    const safeUsers = users.map(({ password, ...rest }) => rest);
-    return NextResponse.json(safeUsers);
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
-  }
-}
-
 export async function POST(request) {
-  if (!(await checkAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-
+  const denied = await requireAdmin(request); if (denied) return denied;
+  let body, data;
+  try { body = await request.json(); data = accountData(body, true); }
+  catch (e) { return NextResponse.json({error:e.message}, {status:400}); }
   try {
-    const data = await request.json();
-    const { username, password, name, ttl, phone, address, role } = data;
-
-    // Generate custom employeeId (e.g., KSR-001)
-    const count = await prisma.user.count();
-    const employeeId = `KSR-${String(count + 1).padStart(3, '0')}`;
-    
-    const bcrypt = require('bcryptjs');
-    const hashedPassword = await bcrypt.hash(password || 'kasir123', 10);
-
-    const user = await prisma.user.create({
-      data: {
-        employeeId,
-        username,
-        password: hashedPassword, // Store hashed password
-        name,
-        ttl,
-        phone,
-        address,
-        role: role || 'KASIR',
-      }
-    });
-
-    const { password: _, ...safeUser } = user;
-    return NextResponse.json(safeUser);
-  } catch (error) {
-    console.error('Error creating user:', error);
-    return NextResponse.json({ error: 'Gagal membuat pengguna. Username mungkin sudah ada.' }, { status: 500 });
-  }
+    const user = await prisma.user.create({data:{...data, password:await bcrypt.hash(body.password, 12)}});
+    const {password, ...safe} = user; return NextResponse.json(safe, {status:201});
+  } catch (e) { return NextResponse.json({error:e.code==='P2002'?'Username sudah digunakan.':'Gagal menyimpan akun.'}, {status:e.code==='P2002'?409:500}); }
 }

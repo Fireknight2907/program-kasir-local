@@ -6,7 +6,7 @@ const customer=fs.readFileSync('src/app/order/[transactionId]/page.js','utf8');
 const submit=customer.slice(customer.indexOf('  const submitOrder = async () => {'),customer.indexOf('  if (pendingOrder) return'));
 function client(store, fetch, pending=null){
  const context=vm.createContext({
-  transactionId:'trial',storageKey:'pending-order:trial',cart:{1:{id:1,quantity:2}},isTakeaway:false,
+  transaction:{status:'ordered'},transactionId:'trial',storageKey:'pending-order:trial',cart:{1:{id:1,quantity:2}},isTakeaway:false,
   pendingRef:{current:pending},submittingRef:{current:false},newOrderRequestId:()=> 'new-request-key-12345',
   localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},fetch,
   setSubmitting(){},setSubmitMessage(){},setPendingOrder(){},setCart(){},setError(){},setOrdered(){},setShowCartModal(){},setTransaction(){}
@@ -46,3 +46,5 @@ test('takeaway retry uses saved session and always releases submit guard',async(
  });
  vm.runInContext(takeaway+';globalThis.submit=handleCreateDirectTakeaway;',ctx);await ctx.submit();await ctx.submit();assert.equal(calls,2);assert.equal(ctx.takeawaySubmittingRef.current,false);assert.ok(saved);
 });
+
+test('closed customer session blocks a new send but permits receipt recovery',async()=>{let calls=0;const ctx=client(new Map(),async()=>{calls++;return {ok:false,status:409,json:async()=>({code:'SESSION_CLOSED'})};});ctx.transaction.status='completed';await ctx.submit();assert.equal(calls,0);ctx.pendingRef.current={transactionId:'trial',requestId:'pending-request-001',items:[{menuItemId:1,quantity:1}]};await ctx.submit();assert.equal(calls,1);});

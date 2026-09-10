@@ -1,0 +1,300 @@
+{
+  "src/app/api/menu/route.js": [
+    {
+      "term": "export async function POST",
+      "lines": [
+        16
+      ]
+    },
+    {
+      "term": "if (!name || !price)",
+      "lines": [
+        23
+      ]
+    },
+    {
+      "term": "price: parseInt",
+      "lines": [
+        30
+      ]
+    }
+  ],
+  "src/app/api/menu/[id]/route.js": [
+    {
+      "term": "export async function PUT",
+      "lines": [
+        5
+      ]
+    },
+    {
+      "term": "price &&",
+      "lines": [
+        17
+      ]
+    }
+  ],
+  "src/app/api/transaction/[id]/edit-order/route.js": [
+    {
+      "term": "export async function PUT",
+      "lines": [
+        5
+      ]
+    },
+    {
+      "term": "const menu=",
+      "lines": [
+        25
+      ]
+    },
+    {
+      "term": "let total=",
+      "lines": [
+        28
+      ]
+    },
+    {
+      "term": "kitchenStatus:orderTotal",
+      "lines": [
+        39
+      ]
+    },
+    {
+      "term": "return tx.transaction.update",
+      "lines": [
+        45
+      ]
+    }
+  ],
+  "src/app/api/transaction/[id]/route.js": [
+    {
+      "term": "export async function GET",
+      "lines": [
+        5
+      ]
+    },
+    {
+      "term": "return NextResponse.json(transaction)",
+      "lines": [
+        26
+      ]
+    },
+    {
+      "term": "export async function PUT",
+      "lines": [
+        33
+      ]
+    },
+    {
+      "term": "PAYMENT_CONFLICT",
+      "lines": [
+        53
+      ]
+    },
+    {
+      "term": "export async function DELETE",
+      "lines": [
+        66
+      ]
+    }
+  ],
+  "src/app/api/transaction/route.js": [
+    {
+      "term": "export async function GET",
+      "lines": [
+        22
+      ]
+    },
+    {
+      "term": "if (tabParam",
+      "lines": [
+        41
+      ]
+    },
+    {
+      "term": "Archive tab",
+      "lines": [
+        56
+      ]
+    },
+    {
+      "term": "createdAt:",
+      "lines": [
+        48,
+        58,
+        68
+      ]
+    }
+  ],
+  "src/app/page.js": [
+    {
+      "term": "const fetchStats",
+      "lines": [
+        219
+      ]
+    },
+    {
+      "term": "const calculateDailyRecap",
+      "lines": [
+        525
+      ]
+    },
+    {
+      "term": "unitPrice: price",
+      "lines": [
+        396,
+        423,
+        566
+      ]
+    },
+    {
+      "term": "handleCreateDirectTakeaway",
+      "lines": [
+        1040,
+        2005
+      ]
+    },
+    {
+      "term": "// 1. Create transaction",
+      "lines": [
+        1062
+      ]
+    },
+    {
+      "term": "localStorage.setItem('pending-staff-takeaway'",
+      "lines": [
+        1089
+      ]
+    },
+    {
+      "term": "currentUser?.role === 'ADMIN'",
+      "lines": [
+        888,
+        918,
+        1456,
+        1510,
+        1533,
+        1811,
+        3564,
+        3627,
+        3831,
+        4053
+      ]
+    },
+    {
+      "term": "expectedRevision: paymentTransaction",
+      "lines": [
+        1136
+      ]
+    },
+    {
+      "term": "expectedRevision: editingTransaction",
+      "lines": [
+        1259
+      ]
+    }
+  ],
+  "src/app/api/upload/route.js": [
+    {
+      "term": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "lines": [
+        10
+      ]
+    },
+    {
+      "term": "await requireStaff",
+      "lines": [
+        15
+      ]
+    },
+    {
+      "term": "supabase.storage",
+      "lines": [
+        32,
+        45
+      ]
+    }
+  ],
+  "src/lib/session.js": [
+    {
+      "term": "export async function requireStaff",
+      "lines": [
+        41
+      ]
+    },
+    {
+      "term": "['ADMIN', 'KASIR']",
+      "lines": [
+        44
+      ]
+    }
+  ],
+  "src/app/api/order/route.js": [
+    {
+      "term": "requestId",
+      "lines": [
+        12,
+        14,
+        34,
+        58
+      ]
+    },
+    {
+      "term": "tx.transaction.updateMany",
+      "lines": [
+        32
+      ]
+    },
+    {
+      "term": "previous.response",
+      "lines": [
+        37
+      ]
+    },
+    {
+      "term": "ORDER_LIMITS.perSession",
+      "lines": [
+        45
+      ]
+    }
+  ],
+  "src/components/KitchenPanel.js": [
+    {
+      "term": "order.items.map",
+      "lines": [
+        10
+      ]
+    },
+    {
+      "term": "kitchenStatus==='queued'",
+      "lines": [
+        10
+      ]
+    }
+  ],
+  "prisma/schema.prisma": [
+    {
+      "term": "model Transaction",
+      "lines": [
+        25
+      ]
+    },
+    {
+      "term": "model Order {",
+      "lines": [
+        40
+      ]
+    },
+    {
+      "term": "kitchenStatus",
+      "lines": [
+        47
+      ]
+    },
+    {
+      "term": "paidTotal",
+      "lines": [
+        32
+      ]
+    }
+  ]
+}

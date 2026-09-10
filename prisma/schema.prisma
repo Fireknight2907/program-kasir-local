@@ -28,6 +28,10 @@ model Transaction {
   createdAt     DateTime  @default(now())
   completedAt   DateTime?
   status        String    @default("open") // open, ordered, completed
+  revision      Int       @default(0)
+  paidTotal     Int?
+  paidById      Int?
+  paymentRequestId String?
   paymentMethod String?   // CASH, QRIS, CARD
   total         Int       @default(0)
   orders        Order[]
@@ -40,6 +44,10 @@ model Order {
   createdAt     DateTime    @default(now())
   total         Int         @default(0)
   isTakeaway    Boolean     @default(false)
+  kitchenStatus String      @default("queued")
+  kitchenVersion Int        @default(0)
+  acceptedAt    DateTime?
+  acceptedById  Int?
   items         OrderItem[]
 }
 
@@ -62,6 +70,7 @@ model User {
   ttl        String? // Tempat, Tanggal Lahir
   phone      String?
   address    String?
+  mustChangePassword Boolean @default(false)
   role       String   @default("KASIR") // ADMIN, KASIR
   createdAt  DateTime @default(now())
 }
@@ -86,4 +95,10 @@ model OrderSubmission {
 
   @@unique([transactionId, requestId])
   @@index([transactionId, createdAt])
+}
+
+model LoginThrottle {
+  key String @id
+  count Int @default(0)
+  expiresAt DateTime
 }

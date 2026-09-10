@@ -9,6 +9,8 @@ import { newOrderRequestId } from '@/lib/order-request';
 export default function OrderPage({ params }) {
   const { transactionId } = use(params);
 
+  const [connectionError, setConnectionError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [menu, setMenu] = useState([]);
   const [transaction, setTransaction] = useState(null);
   const [cart, setCart] = useState({});
@@ -98,6 +100,22 @@ export default function OrderPage({ params }) {
     fetchData();
   }, [transactionId]);
 
+  useEffect(() => {
+    let stopped = false, busy = false;
+    async function refreshStatus() {
+      if (busy) return; busy = true;
+      try {
+        const res = await fetch('/api/transaction/' + transactionId, {cache:'no-store',signal:AbortSignal.timeout(10000)});
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (!stopped) { setTransaction(data); setConnectionError(''); setLastUpdated(new Date()); }
+      } catch { if (!stopped) setConnectionError('Koneksi terputus. Status terakhir mungkin belum terbaru; hubungi staf jika perlu.'); }
+      finally { busy = false; }
+    }
+    const timer = setInterval(refreshStatus, 5000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [transactionId]);
+
   const updateCart = (item, delta) => {
     if (submittingRef.current || pendingRef.current) return;
     setCart(prev => {
@@ -182,6 +200,7 @@ export default function OrderPage({ params }) {
 
   const submitOrder = async () => {
     if (submittingRef.current) return;
+    if (!pendingRef.current && !['open', 'ordered'].includes(transaction?.status)) { setSubmitMessage('Sesi sudah ditutup. Hubungi kasir untuk sesi baru.'); return; }
     const items = Object.values(cart).map(item => ({ menuItemId: item.id, quantity: item.quantity }));
     if (!pendingRef.current && !items.length) return;
     submittingRef.current = true;
@@ -261,9 +280,11 @@ export default function OrderPage({ params }) {
           <CheckCircle size={64} className="mx-auto mb-3" style={{ margin: '0 auto', display: 'block', color: '#10b981' }} />
           <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Pesanan Berhasil Terkirim!</h2>
           <p className="mt-1 mb-4" style={{ fontSize: '0.95rem', opacity: 0.8 }}>
-            Terima kasih! Pesanan Anda telah diterima dan sedang disiapkan di dapur.
+            Pesanan tersimpan. Penerimaan dan proses memasak dikonfirmasi oleh kitchen.
           </p>
 
+          <div role={connectionError?'alert':'status'} style={{fontSize:'.85rem',marginBottom:16,color:connectionError?'#dc2626':'inherit'}}>{connectionError || (lastUpdated ? 'Diperbarui ' + lastUpdated.toLocaleTimeString('id-ID') : 'Status diperbarui otomatis setiap 5 detik.')}</div>
+          <div style={{textAlign:'left',marginBottom:16}}>{transaction?.orders?.filter(order => order.items?.length).map(order => <p key={order.id}><strong>Pesanan #{order.id}:</strong> {{queued:'Menunggu diterima kitchen',accepted:'Diterima kitchen',preparing:'Sedang dimasak',ready:'Siap disajikan',served:'Sudah disajikan',cancelled:'Dibatalkan'}[order.kitchenStatus] || 'Menunggu konfirmasi kitchen'}</p>)}</div>
           {/* Header Info Box */}
           <div style={{
             background: 'rgba(0,0,0,0.03)',
@@ -297,11 +318,7 @@ export default function OrderPage({ params }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <CheckCircle size={14} style={{ color: transaction?.completedAt || transaction?.status === 'completed' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
                 <span>
-                  <strong>Status Pesanan:</strong> {
-                    transaction?.status === 'completed'
-                      ? 'Selesai & Lunas'
-                      : <span style={{ color: '#d97706', fontWeight: 700 }}>Sedang Diproses Dapur</span>
-                  }
+                  <strong>Status pembayaran:</strong> {transaction?.status === 'completed' ? 'Lunas · sesi ditutup' : transaction?.status === 'cancelled' ? 'Sesi dibatalkan' : 'Belum dibayar'}
                 </span>
               </div>
             </div>
@@ -377,12 +394,13 @@ export default function OrderPage({ params }) {
             className="btn btn-outline" 
             style={{ padding: '0.75rem 1.75rem', fontWeight: 700, borderRadius: '14px', width: '100%', fontSize: '0.95rem' }}
             onClick={() => {
+              if (!['open', 'ordered'].includes(transaction?.status)) return;
               setOrdered(false);
               setCart({});
             }}
           >
             <Plus size={18} style={{ display: 'inline', marginRight: '8px' }} />
-            Pesan Menu Tambahan
+            {['open', 'ordered'].includes(transaction?.status) ? 'Pesan Menu Tambahan' : 'Sesi sudah ditutup'}
           </button>
         </div>
       </div>
@@ -410,6 +428,8 @@ export default function OrderPage({ params }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)' }}>
+      {(connectionError || !['open', 'ordered'].includes(transaction?.status)) && <p role="alert" style={{padding:16,background:'#fef3c7',color:'#92400e'}}>{!['open', 'ordered'].includes(transaction?.status) ? 'Sesi sudah ditutup. Minta QR baru kepada kasir untuk memesan kembali.' : connectionError}</p>}
+
       <p role="status" style={{ padding: '0.75rem', textAlign: 'center' }}>Maksimal {ORDER_LIMITS.perMenu} porsi per menu, {ORDER_LIMITS.perSubmission} porsi per kiriman, dan {ORDER_LIMITS.perSession} porsi per sesi. Pesanan lebih besar: hubungi kasir.</p>
       {submitMessage && <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c' }}>{submitMessage}</p>}
       {/* Top Header Bar */}

@@ -1,0 +1,46 @@
+[
+  {
+    "path": "src/app/api/menu/route.js",
+    "sha256": "6525199193a8b73fbf9ab317eef7b3d2517dcd5082bcb2d819c727db8102d59b"
+  },
+  {
+    "path": "src/app/api/menu/[id]/route.js",
+    "sha256": "4b57166492cb71ffbab1c1f78a495156b4cdae46dd14733c372d0507ecd90b78"
+  },
+  {
+    "path": "src/app/api/transaction/route.js",
+    "sha256": "70194ee79ba4fd0072cf7ecdf7bf2cc3d8cfde14399f2ab9fc2ae2fa426985e7"
+  },
+  {
+    "path": "src/app/api/transaction/[id]/route.js",
+    "sha256": "cfdea00998915e51d8dcaba4ca0e9dee41894c74a143384e6257e1b02813b16b"
+  },
+  {
+    "path": "src/app/api/transaction/[id]/edit-order/route.js",
+    "sha256": "2f5deb90d5e633ac121b69f350bb6714f8e5cd2c7e431334aae4c0d841389a22"
+  },
+  {
+    "path": "src/app/api/order/route.js",
+    "sha256": "9bab27b6dd023fac10398ba3b9d84c09c7743bf44ecec491bdc7a48cc713db2b"
+  },
+  {
+    "path": "src/components/KitchenPanel.js",
+    "sha256": "752021f3c5d7d5e2ef047519dfbe2c22cc21baff13ff1aa8795fd4aba4afdd86"
+  },
+  {
+    "path": "src/app/page.js",
+    "sha256": "94882078f062bbf337d88915b529124e7876e0344e1c09d4d7586ffdb514815c"
+  },
+  {
+    "path": "src/lib/session.js",
+    "sha256": "f8a6c6f184afa7c30d683d7fb7ba324be7625c7404745230af59d2fe0a688873"
+  },
+  {
+    "path": "src/app/api/upload/route.js",
+    "sha256": "dbedee9eabde0dfa262f71ca6f8ac517558fa6093195759a22fc6ae29356e825"
+  },
+  {
+    "path": "prisma/schema.prisma",
+    "sha256": "5a7e82c96c00750f9a6a8c33c83d8cb5027b5b6c21c32fc3a94c09941a13af7c"
+  }
+]

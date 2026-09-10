@@ -1,47 +1,22 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { createSession } from '@/lib/session';
-
+import { allowLogin, clearLoginAttempts } from '@/lib/login-throttle';
+import bcrypt from 'bcryptjs';
 export async function POST(request) {
   try {
-    const { username, password } = await request.json();
-
-    if (!username || !password) {
-      return NextResponse.json({ error: 'Username dan password wajib diisi' }, { status: 400 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { username: username.toLowerCase() }
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 });
-    }
-
-    // Verify password with bcrypt, but also fallback to raw string for old unhashed passwords
-    const bcrypt = require('bcryptjs');
-    let isMatch = false;
-    
-    // Check if it's a bcrypt hash (starts with $2a$ or $2b$)
-    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
-      isMatch = await bcrypt.compare(password, user.password);
-    } else {
-      isMatch = user.password === password;
-      // Optionally could auto-hash it here to upgrade the user's password transparently
-    }
-
-    if (!isMatch) {
-      return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 });
-    }
-
-    // Remove password from payload
-    const { password: _, ...userData } = user;
-
+    const body=await request.json();
+    if(typeof body.username!=='string'||!body.username.trim()||body.username.length>32||typeof body.password!=='string'||!body.password||body.password.length>256) return NextResponse.json({error:'Username atau password tidak valid.'},{status:400});
+    const username=body.username.trim().toLowerCase(), password=body.password;
+    if(!await allowLogin(username)) return NextResponse.json({error:'Terlalu banyak percobaan login. Coba kembali dalam 15 menit.'},{status:429,headers:{'Retry-After':'900'}});
+    let user=await prisma.user.findUnique({where:{username}});
+    const hashed=user && /^\$2[aby]\$/.test(user.password);
+    const valid=user && (hashed?await bcrypt.compare(password,user.password):password===user.password);
+    if(!valid) return NextResponse.json({error:'Username atau password salah.'},{status:401});
+    const mustChangePassword=user.mustChangePassword||['admin123','kasir123'].includes(password.toLowerCase());
+    if(!hashed || mustChangePassword!==user.mustChangePassword) user=await prisma.user.update({where:{id:user.id},data:{...(!hashed?{password:await bcrypt.hash(password,12)}:{}),mustChangePassword}});
+    await clearLoginAttempts(username);
     await createSession(user);
-
-    return NextResponse.json(userData);
-  } catch (error) {
-    console.error('Login error:', error);
-    return NextResponse.json({ error: 'Gagal melakukan login' }, { status: 500 });
-  }
+    const {password:_,...safe}=user; return NextResponse.json(safe);
+  } catch { return NextResponse.json({error:'Gagal melakukan login.'},{status:500}); }
 }

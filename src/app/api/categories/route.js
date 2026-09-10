@@ -1,4 +1,4 @@
-import { requireStaff } from '@/lib/session';
+import { requireAdmin } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
@@ -11,42 +11,6 @@ export async function GET() {
       ]
     });
 
-    // Fetch existing categories from MenuItem to ensure all categories are synced in Category table
-    const menuItems = await prisma.menuItem.findMany({
-      select: { category: true },
-      distinct: ['category']
-    });
-
-    const existingNames = new Set(categories.map(c => c.name));
-    let nextOrder = categories.length > 0 ? Math.max(...categories.map(c => c.order)) + 1 : 1;
-
-    let addedNew = false;
-    for (const item of menuItems) {
-      const catName = item.category?.trim();
-      if (catName && !existingNames.has(catName)) {
-        try {
-          await prisma.category.create({
-            data: {
-              name: catName,
-              order: nextOrder++
-            }
-          });
-          addedNew = true;
-        } catch (e) {
-          // ignore duplicate constraint
-        }
-      }
-    }
-
-    if (addedNew) {
-      categories = await prisma.category.findMany({
-        orderBy: [
-          { order: 'asc' },
-          { id: 'asc' }
-        ]
-      });
-    }
-
     return NextResponse.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -55,7 +19,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const denied = await requireStaff(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   try {
     const body = await request.json();
@@ -97,7 +61,7 @@ export async function POST(request) {
 }
 
 export async function PUT(request) {
-  const denied = await requireStaff(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   try {
     const body = await request.json();
@@ -132,7 +96,7 @@ export async function PUT(request) {
 }
 
 export async function DELETE(request) {
-  const denied = await requireStaff(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   try {
     const { searchParams } = new URL(request.url);

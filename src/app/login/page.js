@@ -123,8 +123,7 @@ export default function LoginPage() {
           textAlign: 'center',
           opacity: 0.8
         }}>
-          <p style={{ margin: 0, marginBottom: '0.5rem' }}>Akun bawaan admin:</p>
-          <code style={{ background: 'rgba(0,0,0,0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>admin / admin123</code>
+          <p style={{ margin: 0 }}>Hubungi admin restoran untuk mendapatkan akun.</p>
         </div>
       </div>
     </div>

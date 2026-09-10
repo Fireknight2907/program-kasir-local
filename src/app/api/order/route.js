@@ -52,7 +52,7 @@ export async function POST(request) {
       const total = data.reduce((sum, item) => sum + item.price * item.quantity, 0);
       if (data.some(item => !Number.isSafeInteger(item.price) || item.price < 0) || !Number.isSafeInteger(total) || total + session.total > 2147483647) return reject('INVALID_TOTAL', 'Total pesanan tidak valid. Silakan hubungi kasir.');
       const order = await tx.order.create({ data: { transactionId, total, isTakeaway, items: { create: data } } });
-      await tx.transaction.update({ where: { id: transactionId }, data: { total: { increment: total }, status: 'ordered' } });
+      await tx.transaction.update({ where: { id: transactionId }, data: { total: { increment: total }, status: 'ordered', revision: { increment: 1 } } });
       // Snapshot is independent of Order so edits cannot make a retry recreate food.
       const response = JSON.parse(JSON.stringify(order));
       await tx.orderSubmission.create({ data: { transactionId, requestId, payloadHash, quantity, response } });

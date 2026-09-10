@@ -1,0 +1,90 @@
+[
+  {
+    "page": 1,
+    "words": 279,
+    "minX": 54.0,
+    "maxX": 542.8,
+    "minY": 54.1,
+    "maxY": 607.8
+  },
+  {
+    "page": 2,
+    "words": 303,
+    "minX": 54.0,
+    "maxX": 541.3,
+    "minY": 52.6,
+    "maxY": 664.3
+  },
+  {
+    "page": 3,
+    "words": 309,
+    "minX": 54.0,
+    "maxX": 539.3,
+    "minY": 52.6,
+    "maxY": 763.3
+  },
+  {
+    "page": 4,
+    "words": 319,
+    "minX": 54.0,
+    "maxX": 541.3,
+    "minY": 52.6,
+    "maxY": 569.8
+  },
+  {
+    "page": 5,
+    "words": 303,
+    "minX": 54.0,
+    "maxX": 541.3,
+    "minY": 52.6,
+    "maxY": 664.8
+  },
+  {
+    "page": 6,
+    "words": 314,
+    "minX": 54.0,
+    "maxX": 541.3,
+    "minY": 52.6,
+    "maxY": 683.3
+  },
+  {
+    "page": 7,
+    "words": 278,
+    "minX": 54.0,
+    "maxX": 540.3,
+    "minY": 52.6,
+    "maxY": 588.8
+  },
+  {
+    "page": 8,
+    "words": 300,
+    "minX": 54.0,
+    "maxX": 541.3,
+    "minY": 52.6,
+    "maxY": 669.8
+  },
+  {
+    "page": 9,
+    "words": 274,
+    "minX": 54.0,
+    "maxX": 543.1,
+    "minY": 52.6,
+    "maxY": 612.8
+  },
+  {
+    "page": 10,
+    "words": 312,
+    "minX": 54.0,
+    "maxX": 543.7,
+    "minY": 52.6,
+    "maxY": 679.8
+  },
+  {
+    "page": 11,
+    "words": 252,
+    "minX": 54.0,
+    "maxX": 541.3,
+    "minY": 52.6,
+    "maxY": 508.8
+  }
+]

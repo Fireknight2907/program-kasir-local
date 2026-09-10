@@ -6,15 +6,19 @@ const crypto=require('node:crypto');
 function source(path){return fs.readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'').replace(/export async function/g,'async function');}
 function setup(){
  let token, writes=0;
+ let transaction={id:'TEST',status:'ordered',total:30000,revision:1};
  let user={id:1,username:'test',role:'KASIR',password:'test-password-hash'};
  const env={SESSION_SECRET:'test-only-secret-that-is-at-least-32-characters',NODE_ENV:'production'};
  const jar={get:()=>token?{value:token}:undefined,set:value=>{token=value.value;jar.options=value;},delete:()=>{token=undefined;}};
  const ctx=vm.createContext({Buffer,URL,Date,process:{env},createHmac:crypto.createHmac,timingSafeEqual:crypto.timingSafeEqual,
  cookies:async()=>jar,NextResponse:Response,console,
  prisma:{user:{findUnique:async({where})=>user&&where.id===user.id?user:null},transaction:{update:async({data})=>{writes++;return data;}}}});
+ ctx.prisma.$transaction=async callback=>callback({transaction:{updateMany:async()=>({count:1}),findUnique:async()=>transaction,update:async({data})=>{writes++;const {revision,...rest}=data;Object.assign(transaction,rest);transaction.revision+=revision?.increment||0;return transaction;}}});
+ ctx.bcrypt=require('bcryptjs');ctx.allowLogin=async()=>true;ctx.clearLoginAttempts=async()=>{};ctx.prisma.user.update=async({data})=>Object.assign(user,data);
  vm.runInContext(source('src/lib/session.js'),ctx);
  return {ctx,jar,user,env,token:()=>token,setToken:v=>token=v,setUser:v=>user=v,writes:()=>writes,
- pay:async(body={status:'completed',paymentMethod:'CASH'},origin='http://localhost:3000')=>{
+ transaction:()=>transaction,
+ pay:async(body={status:'completed',paymentMethod:'CASH',expectedTotal:30000,expectedRevision:1,paymentRequestId:'payment-test-00001'},origin='http://localhost:3000')=>{
  vm.runInContext(source('src/app/api/transaction/[id]/route.js'),ctx);
  return ctx.PUT(new Request('http://localhost:3000/api/transaction/TEST',{method:'PUT',headers:{'content-type':'application/json',origin},body:JSON.stringify(body)}),{params:Promise.resolve({id:'TEST'})});
  }};
@@ -59,10 +63,16 @@ test('payment UI keeps modal open and redirects to login after 401',async()=>{
  const start=page.indexOf('  const confirmCompleteTransaction = async () => {');
  const end=page.indexOf('  const handleChangeTableNumber',start);
  let closed=false,busy=false,redirect;
- const ctx=vm.createContext({paymentTransaction:{id:'test'},selectedPaymentMethod:'CASH',
+ const ctx=vm.createContext({paymentBusyRef:{current:false},paymentRequestRef:{current:'payment-test-00001'},paymentTransaction:{id:'test'},selectedPaymentMethod:'CASH',
  setSubmittingPayment:v=>busy=v,setShowPaymentModal:v=>closed=!v,setPaymentTransaction(){},
  fetch:async()=>({ok:false,status:401,json:async()=>({error:'Login required'})}),
  alert(){},router:{push:v=>redirect=v},console});
  vm.runInContext(page.slice(start,end)+'\nglobalThis.pay = confirmCompleteTransaction;',ctx);
  await ctx.pay();assert.equal(closed,false);assert.equal(busy,false);assert.equal(redirect,'/login');
 });
+
+test('stale payment cannot close a session after a new order',async()=>{const a=setup();await a.ctx.createSession(a.user);a.transaction().total=40000;a.transaction().revision=2;const res=await a.pay();assert.equal(res.status,409);assert.equal((await res.json()).code,'PAYMENT_CONFLICT');assert.equal(a.writes(),0);assert.equal(a.transaction().status,'ordered');});
+test('same total with changed revision also requires reconfirmation',async()=>{const a=setup();await a.ctx.createSession(a.user);a.transaction().revision=2;assert.equal((await a.pay()).status,409);assert.equal(a.writes(),0);});
+test('payment retries with same identity only record once',async()=>{const a=setup();await a.ctx.createSession(a.user);assert.equal((await a.pay()).status,200);assert.equal((await a.pay()).status,200);assert.equal(a.writes(),1);assert.equal(a.transaction().paidTotal,30000);assert.equal(a.transaction().paidById,1);});
+test('closed payment cannot be overwritten by a new payment request',async()=>{const a=setup();await a.ctx.createSession(a.user);await a.pay();const res=await a.pay({status:'completed',paymentMethod:'QRIS',expectedTotal:30000,expectedRevision:1,paymentRequestId:'payment-test-00002'});assert.equal(res.status,409);assert.equal(a.transaction().paymentMethod,'CASH');});
+test('default-password account cannot mutate restaurant data',async()=>{const a=setup();a.user.mustChangePassword=true;await a.ctx.createSession(a.user);const res=await a.pay();assert.equal(res.status,403);assert.equal((await res.json()).code,'PASSWORD_CHANGE_REQUIRED');assert.equal(a.writes(),0);});

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getSessionUser } from '@/lib/session';
+import { passwordError } from '@/lib/account-policy';
+import { getSessionUser, createSession } from '@/lib/session';
 
 export async function PUT(request) {
   try {
@@ -9,6 +10,11 @@ export async function PUT(request) {
 
     const { oldPassword, newPassword } = await request.json();
 
+    const origin = request.headers?.get('origin');
+    if (origin && origin !== new URL(request.url).origin) return NextResponse.json({error:'Asal permintaan tidak diizinkan.'},{status:403});
+    const invalid = passwordError(newPassword);
+    if (invalid || typeof oldPassword !== 'string') return NextResponse.json({error:invalid || 'Password lama wajib diisi.'},{status:400});
+    if (oldPassword === newPassword) return NextResponse.json({error:'Password baru harus berbeda.'},{status:400});
     const user = await prisma.user.findUnique({ where: { id: currentUser.id } });
     if (!user) {
       return NextResponse.json({ error: 'Pengguna tidak ditemukan' }, { status: 404 });
@@ -29,11 +35,12 @@ export async function PUT(request) {
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: currentUser.id },
-      data: { password: hashedNewPassword }
+      data: { password: hashedNewPassword, mustChangePassword: false }
     });
 
+    await createSession(updated);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Gagal mengubah password' }, { status: 500 });

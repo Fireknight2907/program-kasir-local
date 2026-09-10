@@ -1,0 +1,7 @@
+PASS responsive admin form and rapid submit only creates once
+PASS cashier edit keeps different historical prices and item identities
+PASS cashier payment sends snapshot and closes stale modal after rejection
+PASS kitchen acceptance and version payload
+PASS kitchen connection warning blocks stale action
+PASS customer shows actual kitchen acknowledgment
+Browser scenarios passed without runtime errors.

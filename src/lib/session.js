@@ -42,7 +42,15 @@ export async function requireStaff(request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Silakan login kembali.' }, { status: 401 });
   if (!['ADMIN', 'KASIR'].includes(user.role)) return NextResponse.json({ error: 'Akses staf diperlukan.' }, { status: 403 });
+  if (user.mustChangePassword) return NextResponse.json({ error: 'Ganti password bawaan sebelum melanjutkan.', code: 'PASSWORD_CHANGE_REQUIRED' }, { status: 403 });
   const origin = request?.headers?.get('origin');
   if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: 'Asal permintaan tidak diizinkan.' }, { status: 403 });
+  return null;
+}
+
+export async function requireAdmin(request) {
+  const denied = await requireStaff(request);
+  if (denied) return denied;
+  if ((await getSessionUser())?.role !== 'ADMIN') return NextResponse.json({ error: 'Fitur ini hanya dapat diakses admin.' }, { status: 403 });
   return null;
 }

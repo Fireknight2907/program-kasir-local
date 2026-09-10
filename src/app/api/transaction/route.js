@@ -1,50 +1,22 @@
-import { requireStaff } from '@/lib/session';
+import { requireStaff, getSessionUser } from '@/lib/session';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { randomUUID } from 'node:crypto';
+import { normalizeTable, tableConflict } from '@/lib/table-session';
 
 export async function POST(request) {
-  const denied = await requireStaff(request);
-  if (denied) return denied;
+  const denied = await requireStaff(request); if (denied) return denied;
   try {
-    const body = await request.json().catch(() => ({}));
-    const tableNumber = body.tableNumber ? String(body.tableNumber).trim() : '0';
-    
-    // Validasi meja dobel jika bukan Take Away
-    if (!tableNumber.toLowerCase().startsWith('take away')) {
-      const activeTrxs = await prisma.transaction.findMany({
-        where: {
-          status: { in: ['open', 'ordered'] }
-        }
-      });
-      const existingActive = activeTrxs.find(
-        trx => trx.tableNumber && trx.tableNumber.toLowerCase() === tableNumber.toLowerCase()
-      );
-      if (existingActive) {
-        return NextResponse.json(
-          { error: `Meja "${tableNumber}" sedang terisi dan belum selesai (Silakan selesaikan transaksi meja tersebut terlebih dahulu).` },
-          { status: 400 }
-        );
-      }
-    }
-
-    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const customId = `MEJA-${tableNumber}-${Date.now().toString(36).toUpperCase()}-${randomSuffix}`;
-
-    const transaction = await prisma.transaction.create({
-      data: {
-        id: customId,
-        tableNumber: tableNumber,
-        status: 'open',
-      },
+    const body = await request.json().catch(() => null);
+    const tableNumber = normalizeTable(body?.tableNumber);
+    if (!tableNumber) return NextResponse.json({error:'Nomor meja wajib diisi, maksimal 80 karakter.'},{status:400});
+    const result = await prisma.$transaction(async tx => {
+      if (await tableConflict(tx, tableNumber)) return null;
+      return tx.transaction.create({data:{id:randomUUID(),tableNumber,status:'open'}});
     });
-    return NextResponse.json(transaction);
-  } catch (error) {
-    console.error('Transaction creation error:', error?.message || error);
-    console.error('Error code:', error?.code);
-    console.error('Error stack:', error?.stack);
-    const errorMessage = error?.message || 'Failed to create transaction';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
-  }
+    if (!result) return NextResponse.json({error:'Meja sedang terisi. Gunakan sesi yang sudah ada.'},{status:409});
+    return NextResponse.json(result);
+  } catch (error) { console.error(error); return NextResponse.json({error:'Gagal membuka meja.'},{status:500}); }
 }
 
 export async function GET(request) {
@@ -55,6 +27,10 @@ export async function GET(request) {
     const dateParam = searchParams.get('date');
     const tabParam = searchParams.get('tab');
 
+    const user = await getSessionUser();
+    if (user?.role !== 'ADMIN' && tabParam !== 'active') {
+      return NextResponse.json({ error: 'Arsip dan statistik hanya untuk admin.' }, { status: 403 });
+    }
     let whereClause = {};
 
     if (dateParam) {
@@ -91,6 +67,14 @@ export async function GET(request) {
       }
     }
 
+    if (user?.role !== 'ADMIN') {
+      // Cashiers may see active sessions and today's opened sessions only,
+      // regardless of a forged date query. Reports remain admin-only.
+      const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const start = new Date(today + 'T00:00:00+08:00');
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      whereClause = { OR: [{ status: { in: ['open', 'ordered'] } }, { createdAt: { gte: start, lt: end } }] };
+    }
     const transactions = await prisma.transaction.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },

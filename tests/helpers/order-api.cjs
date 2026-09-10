@@ -17,7 +17,7 @@ function setup(sessions, failOrder = false, menu = [{ id: 1, price: 10000, isAva
             return { count: draft.sessions.some(s => s.id === where.id) ? 1 : 0 };
           },
           async findUnique({ where }) { return draft.sessions.find(s => s.id === where.id); },
-          async update({ where, data }) { const s = draft.sessions.find(s => s.id === where.id); s.total += data.total.increment; s.status = data.status; return s; }
+          async update({ where, data }) { const s = draft.sessions.find(s => s.id === where.id); s.total += data.total.increment; s.status = data.status; s.revision = (s.revision || 0) + data.revision.increment; return s; }
         },
         menuItem: { async findMany({ where }) { return menu.filter(m => where.id.in.includes(m.id)); } },
         orderItem: { async aggregate({ where }) { return { _sum: { quantity: draft.orders.filter(o => o.transactionId === where.order.transactionId).reduce((sum, o) => sum + o.items.create.reduce((s,i) => s+i.quantity,0),0) } }; } },
