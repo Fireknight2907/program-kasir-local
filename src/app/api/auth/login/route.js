@@ -13,7 +13,7 @@ export async function POST(request) {
     const hashed=user && /^\$2[aby]\$/.test(user.password);
     const valid=user && (hashed?await bcrypt.compare(password,user.password):password===user.password);
     if(!valid) return NextResponse.json({error:'Username atau password salah.'},{status:401});
-    const mustChangePassword=user.mustChangePassword||['admin123','kasir123'].includes(password.toLowerCase());
+    const mustChangePassword=user.mustChangePassword||['kasir123'].includes(password.toLowerCase());
     if(!hashed || mustChangePassword!==user.mustChangePassword) user=await prisma.user.update({where:{id:user.id},data:{...(!hashed?{password:await bcrypt.hash(password,12)}:{}),mustChangePassword}});
     await clearLoginAttempts(username);
     await createSession(user);

@@ -125,6 +125,20 @@ export default function LoginPage() {
         }}>
           <p style={{ margin: 0 }}>Hubungi admin restoran untuk mendapatkan akun.</p>
         </div>
+
+        <div style={{
+          marginTop: '1rem',
+          padding: '0.75rem',
+          borderRadius: '8px',
+          background: 'rgba(234, 179, 8, 0.15)',
+          border: '1px solid #eab308',
+          fontSize: '0.8rem',
+          textAlign: 'center'
+        }}>
+          <strong>Kredensial development (hapus sebelum launch):</strong>
+          <div>Username: admin</div>
+          <div>Password: admin123</div>
+        </div>
       </div>
     </div>
   );

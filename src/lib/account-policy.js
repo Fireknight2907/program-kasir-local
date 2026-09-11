@@ -1,6 +1,6 @@
 export function passwordError(value) {
   if (typeof value !== 'string' || value.length < 10 || new TextEncoder().encode(value).length > 72) return 'Password harus 10–72 byte (minimal 10 karakter).';
-  if (['admin123', 'kasir123', 'password123', '1234567890'].includes(value.toLowerCase()) || !/[a-zA-Z]/.test(value) || !/[^a-zA-Z]/.test(value)) return 'Gunakan gabungan huruf dan angka atau simbol; jangan gunakan password bawaan.';
+  if (['kasir123', 'password123', '1234567890'].includes(value.toLowerCase()) || !/[a-zA-Z]/.test(value) || !/[^a-zA-Z]/.test(value)) return 'Gunakan gabungan huruf dan angka atau simbol; jangan gunakan password bawaan.';
   return null;
 }
 export function accountData(body, creating = false) {
