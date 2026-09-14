@@ -1,13 +1,34 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireStaff,getSessionUser } from '@/lib/session';
+import { requireStaff,requireAdmin,getSessionUser } from '@/lib/session';
+
 export async function PUT(request,{params}){
  const denied=await requireStaff(request);if(denied)return denied;
  const {id}=await params;const orderId=Number(id);
  const body=await request.json().catch(()=>null);
+ if(!Number.isSafeInteger(orderId)||orderId<1||!body)return NextResponse.json({error:'Perubahan status dapur tidak valid.'},{status:400});
+
+ // Admin force-complete: skip all remaining steps and mark as served immediately.
+ if(body.forceServed===true){
+  const adminDenied=await requireAdmin(request);if(adminDenied)return adminDenied;
+  try{
+   const user=await getSessionUser();
+   const result=await prisma.$transaction(async tx=>{
+    const order=await tx.order.findUnique({where:{id:orderId}});
+    if(!order)return{ok:false,error:'Pesanan tidak ditemukan.'};
+    const terminal=['served','dismissed'];
+    if(terminal.includes(order.kitchenStatus))return{ok:false,error:'Pesanan sudah selesai atau dibatalkan.'};
+    await tx.order.update({where:{id:orderId},data:{kitchenStatus:'served',kitchenVersion:{increment:1},...(!order.acceptedAt?{acceptedAt:new Date(),acceptedById:user.id}:{})}});
+    return{ok:true};
+   });
+   if(!result.ok)return NextResponse.json({error:result.error},{status:409});
+   return NextResponse.json({success:true});
+  }catch{return NextResponse.json({error:'Force complete gagal disimpan.'},{status:500});}
+ }
+
  const next={legacy:'accepted',cancelled:'dismissed',queued:'accepted',accepted:'preparing',preparing:'ready',ready:'served'};
- if(!Number.isSafeInteger(orderId)||orderId<1||!body||!Object.hasOwn(next,body.expectedStatus)||next[body.expectedStatus]!==body.status||!Number.isSafeInteger(body.expectedVersion))return NextResponse.json({error:'Perubahan status dapur tidak valid.'},{status:400});
- try {const user=await getSessionUser();const result=await prisma.$transaction(async tx=>{
+ if(!Object.hasOwn(next,body.expectedStatus)||next[body.expectedStatus]!==body.status||!Number.isSafeInteger(body.expectedVersion))return NextResponse.json({error:'Perubahan status dapur tidak valid.'},{status:400});
+ try{const user=await getSessionUser();const result=await prisma.$transaction(async tx=>{
   const order=await tx.order.findUnique({where:{id:orderId}});if(!order)return false;
   // Lock session first, as edit/order routes do, then check the kitchen revision.
   await tx.transaction.updateMany({where:{id:order.transactionId},data:{total:{increment:0}}});
