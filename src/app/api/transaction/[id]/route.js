@@ -10,6 +10,7 @@ export async function GET(request, { params }) {
       where: { id },
       include: {
         orders: {
+          orderBy: { createdAt: 'asc' },
           include: {
             items: {
               include: { menuItem: true }

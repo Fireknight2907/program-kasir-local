@@ -445,6 +445,7 @@ export default function CashierDashboard() {
     const takeawayTables = Object.values(tableMap).filter(t => t.isTakeAway);
     const distinctTablesUsed = physicalTables.length;
     const physicalTurnoverCount = physicalTables.reduce((sum, t) => sum + t.turnoverCount, 0);
+    const physicalItemsQuantity = physicalTables.reduce((sum, t) => sum + t.totalItemsQuantity, 0);
 
     const avgTurnoverPerTable = distinctTablesUsed > 0 ? (physicalTurnoverCount / distinctTablesUsed) : 0;
     const avgOrdersPerTable = validTrxs.length > 0 ? (totalOrdersReceived / validTrxs.length) : 0;
@@ -493,7 +494,8 @@ export default function CashierDashboard() {
     const totalItemsSoldOverall = itemList.reduce((sum, i) => sum + (i.quantity || 0), 0);
     const totalDistinctItemsSold = itemsWithSales.length;
     const avgItemsPerOrder = totalOrdersReceived > 0 ? (totalItemsSoldOverall / totalOrdersReceived) : 0;
-    const avgItemsPerTable = distinctTablesUsed > 0 ? (totalItemsSoldOverall / distinctTablesUsed) : 0;
+    // Dine-in only: take away tidak dihitung karena bukan sesi meja fisik.
+    const avgItemsPerTable = distinctTablesUsed > 0 ? (physicalItemsQuantity / distinctTablesUsed) : 0;
 
     return {
       totalRevenueOverall,
@@ -513,7 +515,7 @@ export default function CashierDashboard() {
       avgDurationMsOverall,
       paymentMethods,
       tableList,
-      topTurnoverTable: [...tableList].sort((a, b) => b.turnoverCount - a.turnoverCount)[0] || null,
+      topTurnoverTable: [...tableList].filter(t => !t.isTakeAway).sort((a, b) => b.turnoverCount - a.turnoverCount)[0] || null,
       topRevenueTable: tableList[0] || null,
       itemList: sortedMostToLeast,
       mostSoldItem,
@@ -986,15 +988,25 @@ export default function CashierDashboard() {
 
     setGeneratingQr(true);
     setTableModalError('');
+    const finalTableNumber = inputTableNumber.trim();
+    // Persist the request id BEFORE sending so a retry after a lost response (weak connection)
+    // reuses the same id instead of creating a duplicate "ghost" session on the same table.
+    const storageKey = 'pending-open-table:' + finalTableNumber.toLowerCase();
+    let requestId;
     try {
-      const finalTableNumber = inputTableNumber.trim();
+      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+      requestId = saved?.requestId || newOrderRequestId();
+      localStorage.setItem(storageKey, JSON.stringify({ requestId }));
+    } catch { requestId = newOrderRequestId(); }
+    try {
       const res = await fetch('/api/transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableNumber: finalTableNumber })
+        body: JSON.stringify({ tableNumber: finalTableNumber, requestId })
       });
       const data = await res.json();
       if (res.ok) {
+        try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
         const orderUrl = `${window.location.origin}/order/${data.id}`;
         setActiveQr({
           id: data.id,
@@ -1009,7 +1021,7 @@ export default function CashierDashboard() {
       }
     } catch (e) {
       console.error(e);
-      setTableModalError('Terjadi kesalahan server.');
+      setTableModalError('Koneksi bermasalah. Klik Buat QR sekali lagi; sesi yang sama tidak akan dibuat dua kali.');
     }
     setGeneratingQr(false);
   };
@@ -1048,8 +1060,11 @@ export default function CashierDashboard() {
     let savedOrder;
     try { savedOrder = JSON.parse(localStorage.getItem('pending-staff-takeaway') || 'null'); }
     catch { setTakeawayError('Penyimpanan browser bermasalah. Periksa pesanan sebelumnya sebelum mencoba kembali.'); return; }
+    let savedTrxRequest;
+    try { savedTrxRequest = JSON.parse(localStorage.getItem('pending-staff-takeaway-trx') || 'null'); }
+    catch { savedTrxRequest = null; }
     const cartItems = Object.values(takeawayCart);
-    if (cartItems.length === 0 && !savedOrder) {
+    if (cartItems.length === 0 && !savedOrder && !savedTrxRequest) {
       setTakeawayError('Silakan pilih minimal 1 menu makanan / minuman.');
       return;
     }
@@ -1059,16 +1074,25 @@ export default function CashierDashboard() {
     setTakeawayError('');
 
     try {
-      const namePart = takeawayCustomerName.trim() ? takeawayCustomerName.trim() : Math.floor(100 + Math.random() * 900);
-      const finalTableNumber = `Take Away - ${namePart}`;
-
       let orderPayload = savedOrder;
       if (!orderPayload) {
-      // 1. Create transaction
+      // Persist the request id BEFORE sending so a retry after a lost response (weak connection)
+      // reuses the same id/table name instead of creating a duplicate "ghost" Take Away session.
+      let finalTableNumber, requestId;
+      if (savedTrxRequest) {
+        ({ tableNumber: finalTableNumber, requestId } = savedTrxRequest);
+      } else {
+        const namePart = takeawayCustomerName.trim() ? takeawayCustomerName.trim() : Math.floor(100 + Math.random() * 900);
+        finalTableNumber = `Take Away - ${namePart}`;
+        requestId = newOrderRequestId();
+        try { localStorage.setItem('pending-staff-takeaway-trx', JSON.stringify({ tableNumber: finalTableNumber, requestId })); } catch { /* ignore */ }
+      }
+
+      // 1. Create transaction (idempotent: retry with the same requestId reuses the same session)
       const trxRes = await fetch('/api/transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableNumber: finalTableNumber })
+        body: JSON.stringify({ tableNumber: finalTableNumber, requestId })
       });
 
       const trxData = await trxRes.json();
@@ -1077,6 +1101,7 @@ export default function CashierDashboard() {
         setSubmittingTakeaway(false);
         return;
       }
+      try { localStorage.removeItem('pending-staff-takeaway-trx'); } catch { /* ignore */ }
 
       // 2. Submit order items directly
       orderPayload = {

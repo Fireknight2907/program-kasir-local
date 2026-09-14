@@ -9,10 +9,20 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => null);
     const tableNumber = normalizeTable(body?.tableNumber);
+    const requestId = body?.requestId;
     if (!tableNumber) return NextResponse.json({error:'Nomor meja wajib diisi, maksimal 80 karakter.'},{status:400});
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) return NextResponse.json({error:'Permintaan tidak valid. Muat ulang halaman dan coba lagi.'},{status:400});
     const result = await prisma.$transaction(async tx => {
+      // Idempotent: retry with the same requestId (e.g. after a lost response on a weak connection) reuses the same session instead of creating a duplicate.
+      const existing = await tx.transaction.findUnique({ where: { creationRequestId: requestId } });
+      if (existing) return existing;
       if (await tableConflict(tx, tableNumber)) return null;
-      return tx.transaction.create({data:{id:randomUUID(),tableNumber,status:'open'}});
+      try {
+        return await tx.transaction.create({data:{id:randomUUID(),tableNumber,status:'open',creationRequestId:requestId}});
+      } catch (e) {
+        if (e.code === 'P2002') return tx.transaction.findUnique({ where: { creationRequestId: requestId } });
+        throw e;
+      }
     });
     if (!result) return NextResponse.json({error:'Meja sedang terisi. Gunakan sesi yang sudah ada.'},{status:409});
     return NextResponse.json(result);
@@ -80,6 +90,7 @@ export async function GET(request) {
       orderBy: { createdAt: 'desc' },
       include: {
         orders: {
+          orderBy: { createdAt: 'asc' },
           include: {
             items: {
               include: { menuItem: true }
