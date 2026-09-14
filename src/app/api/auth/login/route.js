@@ -18,5 +18,8 @@ export async function POST(request) {
     await clearLoginAttempts(username);
     await createSession(user);
     const {password:_,...safe}=user; return NextResponse.json(safe);
-  } catch { return NextResponse.json({error:'Gagal melakukan login.'},{status:500}); }
+  } catch (error) {
+    console.error('Login error:', error);
+    return NextResponse.json({error:'Gagal melakukan login.'},{status:500});
+  }
 }
