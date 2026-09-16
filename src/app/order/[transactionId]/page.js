@@ -213,7 +213,10 @@ export default function OrderPage({ params }) {
       pendingRef.current = payload;
       setPendingOrder(payload);
       const res = await fetch('/api/order', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000), // prevent indefinite hang on cold start
       });
       const response = await res.json();
       if (res.ok) {
@@ -229,7 +232,7 @@ export default function OrderPage({ params }) {
           if (trxRes.ok) setTransaction(await trxRes.json());
         } catch { /* Receipt confirmed; refreshing the bill can be retried by reload. */ }
       } else if (res.status >= 500) {
-        setSubmitMessage('Hasil pengiriman belum pasti. Tekan Cek / Kirim Ulang; pesanan yang sama tidak ditambahkan dua kali.');
+        setSubmitMessage('Menghubungi server... Akan dicoba ulang otomatis.');
       } else {
         // A definite rejection created no order; allow fixing the cart.
         localStorage.removeItem(storageKey);
@@ -239,19 +242,52 @@ export default function OrderPage({ params }) {
         if (response.code === 'SESSION_CLOSED') setError(response.error);
       }
     } catch {
-      setSubmitMessage('Koneksi atau penyimpanan browser bermasalah. Jika pengiriman belum pasti, gunakan Cek / Kirim Ulang atau hubungi kasir.');
+      // Timeout or network drop — safe to retry (requestId is idempotent).
+      setSubmitMessage('Koneksi lambat. Akan dicoba ulang otomatis...');
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
+  // Auto-retry every 8 s while stuck in pendingOrder state.
+  // The requestId is idempotent so retrying is always safe.
+  const autoRetryRef = useRef(null);
+  useEffect(() => {
+    if (!pendingOrder) {
+      if (autoRetryRef.current) { clearInterval(autoRetryRef.current); autoRetryRef.current = null; }
+      return;
+    }
+    if (autoRetryRef.current) return; // already running
+    // Kick off first retry after 4 s, then every 8 s
+    const first = setTimeout(() => { submitOrder(); }, 4000);
+    autoRetryRef.current = setInterval(() => { submitOrder(); }, 8000);
+    return () => { clearTimeout(first); clearInterval(autoRetryRef.current); autoRetryRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOrder]);
+
   if (pendingOrder) return (
     <div className="container text-center p-6">
       <h2>{submitting ? 'Memeriksa pengiriman...' : 'Pengiriman belum dikonfirmasi'}</h2>
-      <p>{submitMessage || 'Ada pengiriman yang perlu diperiksa sebelum membuat pesanan baru.'}</p>
-      <button className="btn btn-primary" disabled={submitting} onClick={submitOrder}>Cek / Kirim Ulang</button>
-      <p>Jangan membuat pesanan baru dari tab lain untuk menggantikan pengiriman ini. Jika tetap bermasalah, hubungi kasir.</p>
+      <p style={{ marginBottom: 16 }}>
+        {submitMessage || 'Ada pengiriman yang sedang diverifikasi. Halaman akan otomatis lanjut setelah terkonfirmasi.'}
+      </p>
+      {/* Spinning indicator while checking */}
+      {submitting && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <svg style={{ animation: 'spin 1s linear infinite', width: 22, height: 22 }} viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+          </svg>
+          <span style={{ opacity: 0.7, fontSize: '.9rem' }}>Sedang memeriksa...</span>
+        </div>
+      )}
+      {/* Disable button while submitting to prevent double-send */}
+      <button className="btn btn-primary" disabled={submitting} onClick={submitOrder} style={{ opacity: submitting ? 0.6 : 1 }}>
+        {submitting ? 'Memeriksa...' : 'Cek / Kirim Ulang'}
+      </button>
+      <p style={{ marginTop: 16, fontSize: '.85rem', opacity: 0.7 }}>Jangan membuat pesanan baru dari tab lain untuk menggantikan pengiriman ini. Jika tetap bermasalah, hubungi kasir.</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 
