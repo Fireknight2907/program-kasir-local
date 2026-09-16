@@ -208,17 +208,19 @@ export default function OrderPage({ params }) {
     setSubmitMessage('');
     try {
       const payload = pendingRef.current || { transactionId, requestId: newOrderRequestId(), items, isTakeaway };
-      // Persist BEFORE sending. On refresh or uncertain failure reuse the exact payload.
+      // Persist BEFORE sending as safety net.
       localStorage.setItem(storageKey, JSON.stringify(payload));
       pendingRef.current = payload;
-      setPendingOrder(payload);
+      // Only setPendingOrder if we were already in pending state (retrying)
+      if (pendingOrder) setPendingOrder(payload);
+
       const res = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15000), // prevent indefinite hang on cold start
+        signal: AbortSignal.timeout(20000), // generous timeout for serverless
       });
-      const response = await res.json();
+      const response = await res.json().catch(() => ({}));
       if (res.ok) {
         localStorage.removeItem(storageKey);
         pendingRef.current = null;
@@ -232,18 +234,20 @@ export default function OrderPage({ params }) {
           if (trxRes.ok) setTransaction(await trxRes.json());
         } catch { /* Receipt confirmed; refreshing the bill can be retried by reload. */ }
       } else if (res.status >= 500) {
-        setSubmitMessage('Menghubungi server... Akan dicoba ulang otomatis.');
+        setPendingOrder(payload);
+        setSubmitMessage(response?.error || 'Menghubungi server... Akan dicoba ulang otomatis.');
       } else {
         // A definite rejection created no order; allow fixing the cart.
         localStorage.removeItem(storageKey);
         pendingRef.current = null;
         setPendingOrder(null);
-        setSubmitMessage(response.error || 'Pesanan ditolak. Periksa pesanan Anda.');
-        if (response.code === 'SESSION_CLOSED') setError(response.error);
+        setSubmitMessage(response?.error || 'Pesanan ditolak. Periksa pesanan Anda.');
+        if (response?.code === 'SESSION_CLOSED') setError(response?.error);
       }
-    } catch {
-      // Timeout or network drop — safe to retry (requestId is idempotent).
-      setSubmitMessage('Koneksi lambat. Akan dicoba ulang otomatis...');
+    } catch (err) {
+      // Timeout or network drop — enter pendingOrder mode for auto-retry
+      setPendingOrder(pendingRef.current);
+      setSubmitMessage('Koneksi lambat atau terputus. Sedang mencoba ulang otomatis...');
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
