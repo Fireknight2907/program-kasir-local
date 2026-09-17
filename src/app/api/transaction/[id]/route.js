@@ -40,7 +40,8 @@ export async function GET(request, { params }) {
       orders: transaction.orders.map(order => ({
         id: order.id, createdAt: order.createdAt, total: order.total,
         isTakeaway: order.isTakeaway, kitchenStatus: order.kitchenStatus,
-        items: order.items.map(item => ({
+        // Item yang sudah dihapus kasir lewat Edit Pesanan tidak ditampilkan ke customer.
+        items: order.items.filter(item => !item.deletedAt).map(item => ({
           id: item.id, menuItemId: item.menuItemId, quantity: item.quantity, price: item.price,
           menuItem: { name: item.menuItem?.name }
         }))
@@ -90,11 +91,18 @@ export async function DELETE(request,{params}) {
   const user=await getSessionUser();if(user.role!=='ADMIN')return NextResponse.json({error:'Hanya admin dapat menghapus transaksi.'},{status:403});
   const {id}=await params;
   try {
-    await prisma.$transaction(async tx=>{
-      await tx.transaction.updateMany({where:{id},data:{total:{increment:0}}});
-      await tx.orderItem.deleteMany({where:{order:{transactionId:id}}});
-      await tx.order.deleteMany({where:{transactionId:id}});
-      await tx.transaction.delete({where:{id}});
-    });return NextResponse.json({success:true});
-  }catch{return NextResponse.json({error:'Gagal menghapus transaksi.'},{status:500});}
+    const result=await prisma.$transaction(async tx=>{
+      const lock=await tx.transaction.updateMany({where:{id},data:{total:{increment:0}}});
+      if(!lock.count)return {error:'Transaksi tidak ditemukan.'};
+      const current=await tx.transaction.findUnique({where:{id}});
+      if(current.status==='deleted')return {error:'Transaksi sudah dihapus.'};
+      // Soft delete: data tidak pernah benar-benar hilang dari database, hanya ditandai.
+      // Order yang masih aktif di kitchen ikut dibatalkan (sama seperti alur "Batalkan" transaksi) supaya tidak nyangkut di antrean dapur.
+      await tx.order.updateMany({where:{transactionId:id,kitchenStatus:{notIn:['served','dismissed']}},data:{kitchenStatus:'cancelled',kitchenVersion:{increment:1}}});
+      await tx.transaction.update({where:{id},data:{status:'deleted',deletedAt:new Date(),deletedById:user.id}});
+      return {ok:true};
+    });
+    if(result.error)return NextResponse.json({error:result.error},{status:409});
+    return NextResponse.json({success:true});
+  }catch(error){console.error(error);return NextResponse.json({error:'Gagal menghapus transaksi.'},{status:500});}
 }

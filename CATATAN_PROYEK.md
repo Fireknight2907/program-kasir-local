@@ -163,3 +163,142 @@ Diminta investigasi (tanpa mengubah kode) kenapa `localhost:3000` menampilkan ba
 - **Status: TERBUKTI SELESAI** untuk bagian skema database. Pengguna masih perlu refresh browser untuk konfirmasi banner "Koneksi bermasalah" hilang di UI — belum dicoba langsung di browser oleh saya.
 - Belum diuji: `POST /api/transaction` (buka meja / Take Away) end-to-end setelah perbaikan ini — secara teori sudah harus jalan karena kolomnya sudah ada, tapi belum dicoba nyata.
 - **Belum diperbaiki** (opsional, disebutkan di atas): `console.error(error)` yang hilang di `catch` GET `route.js:103-104` — kalau mau observability lebih baik ke depan.
+
+---
+
+## 2026-09-16 — Claude Sonnet 5
+
+### Tugas
+Diminta jelaskan fungsi menu "Kitchen" lalu audit skenario (tanpa ubah kode): "kitchen tidak menerima struk order" / "printer habis kertas" — apakah pending order tercetak ulang, apakah order tersimpan tapi kitchen tidak menerima, dan apakah menu Kitchen menyelesaikan masalah itu.
+
+### Temuan (dibaca langsung dari kode, bukan dugaan)
+- **Tidak ada integrasi printer struk dapur sama sekali di kodebase ini.** Satu-satunya `window.print()` (`src/app/page.js:1245`) dipakai untuk cetak QR code meja, bukan struk pesanan. Tidak ada library/endpoint print job (escpos, thermal, dsb).
+- Teks di `KitchenPanel.js:149` ("Jika printer gagal, gunakan antrean layar...") **menyesatkan** — menyiratkan ada 2 jalur (printer utama + layar cadangan), padahal senyatanya cuma 1 jalur: layar KitchenPanel. Sudah dicatat juga di `docs/trial-readiness.md:52` ("Printer kitchen otomatis: belum terverifikasi").
+- Satu-satunya jalur order sampai ke dapur: `POST /api/order` simpan ke DB (`kitchenStatus:'queued'`) → ditampilkan di `KitchenPanel.js` yang auto-poll tiap 5 detik. Order tersimpan aman di DB terlepas dari apakah staf sedang melihat layar atau tidak — tapi "penerimaan" oleh dapur murni manual (klik "Terima pesanan").
+- Tidak ada mekanisme notifikasi aktif ke staf dapur (dicek: tidak ada `Notification`, `Audio`, `beep` di kode) — kalau tidak ada yang membuka/melihat layar Kitchen, order bisa nyangkut di status `queued` tanpa ada yang tahu.
+
+### Keputusan pengguna
+Menu Kitchen **belum dihapus** — pengguna mau lihat dulu apakah pesanan benar-benar sampai ke kitchen (observasi berjalan). Rencana ke depan: pakai **printer fisik** sebagai jalur akses kitchen untuk tahu apa yang dipesan customer (bukan cuma layar).
+
+### Pekerjaan belum selesai / langkah berikutnya
+- **Task baru (belum dikerjakan)**: implementasi integrasi printer untuk struk dapur — kitchen akan mengandalkan cetakan fisik untuk melihat pesanan customer, bukan (atau selain) layar KitchenPanel. Perlu diklarifikasi ke pengguna sebelum mulai: jenis printer (USB/thermal/network), kapan struk dicetak (saat order masuk vs saat diterima), apakah tetap butuh fallback layar kalau printer mati/kehabisan kertas, dan apakah menu Kitchen (layar) akhirnya dihapus atau tetap dipertahankan sebagai pelengkap.
+- Menu Kitchen (layar) **jangan dihapus dulu** sampai integrasi printer siap dan sudah diverifikasi jalan — supaya tidak ada celah dimana dapur benar-benar tidak punya jalur melihat pesanan sama sekali.
+
+---
+
+## 2026-09-16 (lanjutan) — Claude Sonnet 5
+
+### Tugas
+Tambah fitur soft-delete: transaksi yang di-"Hapus" (tombol Admin) tidak lagi benar-benar dihapus dari database, tapi ditandai dan ditampilkan dengan garis coret + warna merah. Scope dikonfirmasi ke pengguna lewat pertanyaan (bukan asumsi sendiri, sesuai aturan proyek): **hanya tombol "Hapus" transaksi** (bukan "Batalkan" yang sudah soft dari awal, bukan juga hapus-item di Edit Pesanan). Transaksi yang dihapus **dikecualikan dari Statistik/laporan pendapatan**.
+
+### Perubahan kode
+- `prisma/schema.prisma` — tambah `deletedAt DateTime?` dan `deletedById Int?` di model `Transaction`. Status baru `'deleted'` dipakai di kolom `status` yang sudah ada (String bebas, sama seperti `'cancelled'`), tidak perlu ubah tipe kolom.
+- `src/app/api/transaction/[id]/route.js` (`DELETE`) — sebelumnya hard-delete (`orderItem.deleteMany` → `order.deleteMany` → `transaction.delete`). Sekarang soft-delete: transaksi ditandai `status:'deleted', deletedAt, deletedById`, baris tidak pernah dihapus dari DB. Order kitchen yang masih aktif (belum `served`/`dismissed`) ikut di-set `kitchenStatus:'cancelled'` — pola yang sama persis dengan alur "Batalkan" transaksi biasa (`route.js:76` di file yang sama) — supaya tidak ada tiket nyangkut di layar Kitchen untuk transaksi yang sudah dihapus.
+- `src/app/page.js` — tab Transaksi & Arsip:
+  - Badge status: tambah label "Dihapus" (warna `danger`, sama seperti "Dibatalkan") untuk `status==='deleted'`.
+  - Card ditampilkan dengan `textDecoration:'line-through'`, warna merah, dan border merah saat `status==='deleted'`.
+  - Tombol QR/Edit/Batalkan/Hapus disembunyikan untuk transaksi yang statusnya sudah `'deleted'` (tidak ada aksi lanjutan yang masuk akal).
+  - Urutan sort (transaksi "kelar" ditaruh di bawah) diperbarui supaya `'deleted'` diperlakukan sama seperti `'completed'`/`'cancelled'`.
+  - Teks konfirmasi tombol "Hapus" diperbarui — sebelumnya bilang "permanen, tidak dapat dikembalikan" (sudah tidak akurat), sekarang menjelaskan bahwa transaksi ditandai terhapus tapi datanya tetap tersimpan.
+
+### Kenapa desainnya begini (arsitektur & data flow)
+- **Tidak menambah tabel/model baru** — cukup reuse kolom `status` (String bebas) yang sudah dipakai untuk `open/ordered/completed/cancelled`, ditambah `deletedAt`/`deletedById` untuk jejak audit (siapa & kapan). Pola sama dengan `paidById`/`acceptedById` yang sudah ada di schema (Int polos tanpa relasi FK eksplisit).
+- **Statistik otomatis mengecualikan transaksi terhapus tanpa perlu diubah** — `calculateTableStats()` dan `calculateDailyRecap()` di `page.js` dari awal sudah filter `trx.status === 'completed'` saja untuk hitung pendapatan/porsi terjual (`page.js:249`, `:531`). Karena status `'deleted'` bukan `'completed'`, otomatis tidak ikut dihitung — tidak perlu sentuh logika Statistik sama sekali.
+- **Order kitchen ikut dibatalkan saat transaksi dihapus** — kalau tidak, order yang masih `queued`/`preparing` di dapur akan tetap nyangkut di layar Kitchen padahal transaksi induknya sudah "dihapus" dari sudut pandang kasir. Solusinya reuse logika pembatalan order yang sudah ada dan terbukti benar (dipakai juga oleh tombol "Batalkan"), bukan bikin logika baru.
+- **Validasi PUT transaksi tidak diubah** (`route.js:64`, hanya terima target status `'completed'`/`'cancelled'`) — sengaja dibiarkan supaya status `'deleted'` **hanya** bisa di-set lewat endpoint `DELETE` (khusus Admin), tidak bisa disisipkan lewat endpoint lain.
+
+### Pengujian
+- `npx eslint src/app/page.js` — dibandingkan sebelum/sesudah perubahan (`git stash` + lint ulang): **hasil identik** (6 error/6 warning pra-existing, hanya nomor baris bergeser). Tidak ada error/warning baru.
+- `npx eslint src/app/api/transaction/[id]/route.js` — 0 error, 0 warning.
+- `npx prisma validate` — schema valid.
+- **Belum dijalankan**: `npx prisma db push` (skema baru belum diterapkan ke database manapun — baik `kasir_local` maupun produksi Supabase). Sengaja tidak dijalankan sendiri karena kredensial database lokal (`kasir_local`) tidak tersimpan di memori/sesi ini (dan memang seharusnya tidak dicatat, sesuai aturan proyek "jangan simpan password"), dan mengubah skema database adalah aksi yang butuh persetujuan eksplisit pengguna.
+- **Belum diuji di browser** — alur hapus transaksi → tampilan garis coret merah → cek Statistik tidak berubah, semuanya baru diverifikasi lewat pembacaan kode, belum eksekusi nyata.
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. **Perlu pengguna jalankan (atau beri izin eksplisit)**: `npx prisma db push` ke `kasir_local` dulu untuk testing, baru ke produksi Supabase setelah diverifikasi jalan — supaya kolom `deletedAt`/`deletedById` benar-benar ada di database. Tanpa ini, tombol "Hapus" akan error 500 (kolom belum ada), sama persis dengan insiden `creationRequestId` tanggal 2026-09-14 di atas — **jangan ulangi pola itu**, pastikan migrasi dijalankan sebelum fitur ini dipakai di produksi.
+2. Setelah migrasi jalan, uji manual di browser: hapus 1 transaksi test, pastikan (a) card berubah garis-coret merah, (b) tombol aksi hilang, (c) transaksi tetap muncul di Statistik sebagai "tidak dihitung" (bandingkan total sebelum/sesudah hapus).
+3. Opsional (belum diminta, jangan dikerjakan tanpa konfirmasi): tambah hitungan "Dihapus" di rekap harian Arsip (`recap.totalCancelled` di `page.js:590` saat ini cuma hitung `'cancelled'`, belum ada `totalDeleted`).
+
+---
+
+## 2026-09-17 — Claude Sonnet 5
+
+### Tugas
+Pengguna laporkan 2 masalah setelah sesi sebelumnya:
+1. Tombol "Hapus" transaksi tidak berfungsi.
+2. Item makanan yang dihapus lewat fitur Edit Pesanan tidak muncul garis merah.
+
+### Temuan & perbaikan
+
+**#1 — TERBUKTI, root cause sudah diduga sebelumnya dan dikonfirmasi via query read-only**
+- Database aktif yang dipakai `.env` saat ini adalah **Supabase produksi** (`aws-0-ap-southeast-1.pooler.supabase.com`), bukan lokal.
+- Query `information_schema.columns` read-only mengonfirmasi kolom `deletedAt`/`deletedById` (ditambahkan sesi 2026-09-16) **belum ada** di tabel `Transaction` produksi — persis pola insiden `creationRequestId` tanggal 14 sebelumnya. Migrasi (`prisma db push`) memang belum sempat dijalankan sesi lalu karena menunggu izin pengguna.
+- **Belum diperbaiki** — menunggu pengguna jalankan/mengizinkan `npx prisma db push` (lihat Pekerjaan belum selesai).
+
+**#2 — Scope baru, dikonfirmasi via pertanyaan ke pengguna (bukan diasumsikan)**
+- Sesi 2026-09-16 sebelumnya sengaja **mengecualikan** "item yang dihapus di Edit Pesanan" dari fitur soft-delete (pengguna saat itu hanya minta tombol Hapus Transaksi). Hari ini dikonfirmasi ulang: pengguna memang mau soft-delete diperluas ke item pesanan yang dihapus kasir lewat modal Edit Pesanan.
+- **Sudah diimplementasikan** (lihat Perubahan kode).
+
+### Perubahan kode
+- `prisma/schema.prisma` — tambah `deletedAt DateTime?` di model `OrderItem` (soft-delete per item, terpisah dari soft-delete `Transaction` yang sudah ada).
+- `src/app/api/transaction/[id]/edit-order/route.js`:
+  - Item yang dihapus kasir (tidak ikut dikirim ulang di `items[]`) sekarang di-`update({deletedAt:new Date()})`, bukan `delete()`. Idempotent — kalau sudah `deletedAt` sebelumnya, tidak ditimpa ulang/tidak memicu `changed=true` lagi supaya tidak reset `kitchenStatus` tanpa perubahan nyata.
+  - Tambah validasi pertahanan: kalau ada `itemId` yang dikirim client ternyata `deletedAt` sudah terisi (item "hantu" yang seharusnya sudah tidak bisa diedit lagi), request ditolak `ORDER_CONFLICT` — mencegah item yang sudah dihapus "dihidupkan lagi" lewat client basi.
+  - Total (`orderTotal`, `total` transaksi) tetap otomatis benar tanpa perubahan logika — sudah dari awal hanya menjumlah item yang ada di `incoming` (submitted), item yang di-soft-delete otomatis tidak ikut dihitung.
+- `src/app/api/transaction/[id]/route.js` (GET, cabang customer/publik) — item dengan `deletedAt` di-filter keluar sebelum dikirim ke customer (`order.items.filter(item => !item.deletedAt)`). Customer tidak perlu lihat jejak "item yang dicoret kasir" di halaman pesanannya sendiri.
+- `src/app/page.js`:
+  - `openEditOrderModal` — item dengan `deletedAt` di-filter keluar saat membangun state modal Edit Pesanan, supaya tidak muncul lagi sebagai baris yang bisa diedit/di-resurrect.
+  - Daftar "Pesanan" read-only di tab Transaksi (baris ~1778) dan Arsip (baris ~2664) — item dengan `deletedAt` ditampilkan `textDecoration:'line-through'` + warna merah.
+- `src/components/KitchenPanel.js` — item pesanan yang `deletedAt` ditampilkan dicoret+merah di kartu Kitchen, supaya dapur tahu item itu sudah dibatalkan kasir (bukan hilang tanpa keterangan). Tidak perlu ubah query `GET /api/kitchen` karena field baru otomatis ikut ter-include (tidak ada `select` eksplisit di query itu).
+
+### Kenapa desainnya begini
+- **Konsisten dengan pola soft-delete `Transaction`** dari sesi sebelumnya — reuse pendekatan `deletedAt` timestamp, bukan bikin mekanisme berbeda.
+- **Customer sengaja dikecualikan dari melihat item dicoret** — ini keputusan UX standar (bukan aturan bisnis harga/stok), supaya customer tidak bingung/khawatir melihat "pesanan saya dicoret" padahal itu cuma koreksi kasir. Staf (Transaksi/Arsip/Kitchen) tetap lihat semua sebagai jejak audit.
+- **Item yang sudah dihapus tidak bisa diedit lagi / dihidupkan lagi** — validasi defensif ditambahkan supaya tidak ada celah data tidak konsisten (misalnya quantity berubah pada item yang seharusnya sudah final/terhapus).
+
+### Pengujian
+- `npx eslint` pada semua file yang diubah (`page.js`, `KitchenPanel.js`, `transaction/[id]/route.js`, `edit-order/route.js`) — dibandingkan hasil sebelum/sesudah: **identik**, tidak ada error/warning baru.
+- `npx prisma validate` — schema valid.
+- Query read-only `information_schema.columns` ke database produksi aktif — mengonfirmasi akar masalah #1 (kolom belum ada).
+- **Belum dijalankan**: `npx prisma db push` untuk kolom `OrderItem.deletedAt` maupun kolom `Transaction.deletedAt`/`deletedById` dari sesi sebelumnya — keduanya **masih menunggu izin pengguna** untuk migrasi ke database (lokal `kasir_local` dan/atau produksi Supabase).
+- **Belum diuji di browser** — alur hapus item di Edit Pesanan → cek tampilan dicoret di Transaksi/Arsip/Kitchen, belum dicoba nyata karena schema belum di-push jadi fitur belum bisa dites end-to-end.
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. **Paling prioritas — perlu keputusan & izin pengguna**: jalankan `npx prisma db push` supaya SEMUA kolom baru (`Transaction.deletedAt`, `Transaction.deletedById`, `OrderItem.deletedAt`) benar-benar dibuat di database yang dipakai. Selama ini belum dilakukan, baik fitur "Hapus Transaksi" maupun "item dicoret di Edit Pesanan" **tidak akan berfungsi** (kemungkinan besar error 500 begitu endpoint terkait dipanggil, sama seperti error yang sudah dilaporkan pengguna).
+2. Setelah migrasi jalan: uji manual end-to-end di browser — hapus transaksi (cek garis-coret merah + hilang dari Statistik), hapus 1 item di Edit Pesanan (cek garis-coret merah muncul di Transaksi/Arsip/Kitchen, dan TIDAK muncul di halaman order customer).
+
+---
+
+## 2026-09-16 — Codex: review awal dan laporan harian
+
+- Selesai: automation aktif `review-harian-codebase-kasir`, setiap hari 05.00 Asia/Taipei (UTC+8), hasil di task ini untuk dibaca workspace manager. Review awal malam ini karena 05.00 sudah lewat. Baseline HEAD `ec35c98`; run berikutnya membandingkan laporan sukses terakhir termasuk perubahan belum di-commit.
+- Kondisi awal: Agents.md dan Claude.md staged (masing-masing 58 baris baru); CATATAN_PROYEK.md memiliki 20 baris tambahan sebelum entri ini. Pekerjaan tersebut dipertahankan.
+- Perubahan 16 September (`89fc8ec..ec35c98`): 3 file, 236 baris tambah/63 hapus: API order, halaman order customer, KitchenPanel. Tidak ada perubahan schema pada rentang ini.
+- Terverifikasi di kode: timeout submit 20 detik, retry pending order dan tombol disabled ada di src/app/order/[transactionId]/page.js:221,257,874. Backlog lama tambah timeout sudah diimplementasikan, belum diuji ulang di browser. Relevan untuk jaringan lambat.
+- Temuan prioritas tinggi: diff ec35c98 menghapus penguncian sesi sebelum validasi order. Status dan batas order dibaca di luar transaksi; src/app/api/order/route.js:75-95 menulis tanpa memeriksa ulang keduanya. Pembayaran masih mengunci lalu menutup sesi (PUT src/app/api/transaction/[id]/route.js). Potensi order masuk setelah pembayaran lalu mengubah status kembali menjadi ordered; request bersamaan juga berpotensi melewati batas sesi. Perubahan perlindungan terbukti dari kode, dampak concurrency belum direproduksi. Task baru: uji bersamaan pada database lokal dan perbaiki berdasarkan hasil. Kesimpulan aman audit lama tidak otomatis berlaku untuk versi sekarang.
+- Penilaian: pemendekan transaksi punya tujuan fungsional, tetapi klaim komentar <50ms belum dibuktikan benchmark. Kebenaran alur perlu didahulukan sebelum menerima optimasi sebagai selesai.
+- KitchenPanel menambah error per pesanan dan pembaruan status optimistis sebelum respons server. Berguna untuk respons UI; sinkronisasi setelah kegagalan jaringan perlu uji browser.
+- Jalur saat ini: API order -> DB queued -> polling KitchenPanel tiap 5 detik. Pencarian src/package.json hanya menemukan window.print untuk QR di src/app/page.js:1245, bukan integrasi struk dapur. Teks printer src/components/KitchenPanel.js:149 tidak sesuai implementasi. Printer masih backlog, perlu spesifikasi perangkat/alur; layar Kitchen tetap dibutuhkan.
+- Backlog tetap: keputusan bisnis statistik jam sibuk/durasi take away dan reset kitchenStatus ketika edit; uji browser; pengaturan lingkungan database dan persiapan login sebelum launch sesuai catatan sebelumnya. DB produksi tidak diverifikasi ulang.
+- Pemeriksaan: baca catatan, git status/log/diff, implementasi API order/pembayaran/Kitchen dan pencarian printer; automation berhasil dibuat dan tool view menampilkan kartu. Tidak menjalankan tes runtime. Kode aplikasi, arsitektur dan database tidak diubah pada tugas ini; hanya catatan dan jadwal laporan.
+
+---
+
+## 2026-09-17 07:26 Asia/Taipei — Codex: laporan harian
+
+- Review selesai; dijalankan sekitar 07:25 Taiwan, bukan tepat 05:00. Penyebab keterlambatan scheduler belum diperiksa. Baseline commit tetap ec35c98 (tidak ada commit baru). Snapshot saat review: 5 file produk berubah belum di-commit (schema, API transaksi, edit-order, dashboard, KitchenPanel), 58 baris ditambah/42 dikurangi. Agents.md dan Claude.md masih staged; .claude/settings.local.json baru/untracked, isi konfigurasi tidak diperiksa. Perubahan catatan tidak dihitung sebagai perubahan produk.
+- Implementasi baru terverifikasi: soft-delete transaksi memakai status deleted + deletedAt/deletedById, membatalkan tiket kitchen aktif; soft-delete item memakai OrderItem.deletedAt, melarang edit item terhapus, menyembunyikannya dari customer dan mencoretnya pada layar staf. Berguna untuk riwayat koreksi, bukan sekadar kosmetik. Tidak ada tabel baru; tiga kolom baru perlu sinkronisasi database.
+- P1 BARU TERBUKTI melalui eksekusi fungsi calculateDailyRecap asli yang diekstrak dari src/app/page.js:530-594 dengan data sintetis, tanpa database: transaksi completed dengan item aktif Rp10.000 dan item deletedAt Rp20.000 menghasilkan totalRevenue Rp30.000 dan 2 item, sedangkan paymentMethods.CASH.revenue Rp10.000. Seharusnya pendapatan Rp10.000 dan 1 item aktif. Penyebab: loop pada :556 tidak mengecualikan deletedAt. calculateTableStats :380 juga masih mengagregasi semua item (temuan statis); exportToExcel menggunakan calculateDailyRecap sehingga ikut terdampak. Task manager: perbaiki semua agregasi item terhapus dan uji kesesuaian rekap, statistik, ekspor, dan pembayaran. Ini belum diperbaiki pada review ini.
+- P1 BELUM TUNTAS: catatan Claude 17 September menyatakan query DB produksi membuktikan kolom soft-delete belum ada. Review ini mengonfirmasi schema sumber dan Prisma Client hasil generate sudah memuat ketiga kolom, tetapi tidak mengakses DB produksi; status skema live adalah laporan AI sebelumnya, belum diverifikasi ulang. Ketidaksesuaian dapat berdampak juga pada GET yang mengambil kolom model, bukan hanya tombol Hapus. Task: pastikan target DB, validasi dan terapkan migrasi pada lingkungan uji lalu produksi sesuai otorisasi; lakukan uji end-to-end. Jangan tandai fitur siap hanya karena kode/lint selesai.
+- P1 LAMA MASIH TERBUKA: API order tidak berubah dari ec35c98; status dan batas sesi masih diperiksa di luar transaksi sebelum penulisan tanpa penguncian/revalidasi. Risiko bersamaan dengan pembayaran tetap ada dan kini juga perlu skenario bersamaan dengan soft-delete. Dampak concurrency belum direproduksi.
+- Backlog tetap: integrasi printer belum ditemukan (pencarian src/package.json hanya window.print QR src/app/page.js:1245), uji browser soft-delete/Kitchen/retry, keputusan bisnis statistik dan reset kitchenStatus saat pengurangan item. Timeout customer sudah diimplementasikan sebelumnya, jangan didaftarkan sebagai implementasi baru yang belum dikerjakan.
+- Pemeriksaan dilakukan: catatan, git status/log/diff/numstat, kode alur soft-delete/order/Kitchen/statistik, Prisma Client schema, serta uji fungsi rekap memakai data sintetis. Tidak menjalankan browser, build/lint ulang atau query DB live; hasil lint/Prisma validate di entri Claude adalah laporan sebelumnya. Tidak mengubah kode aplikasi, database, commit atau deployment. Laporan lengkap juga disampaikan di percakapan agar manager tidak bergantung pada akses file lokal.
+
+## 2026-09-18 — Codex: diagnosis cetak QR 58 mm
+
+- Tugas: periksa laporan cetak QR menyerupai HVS. Diagnosis selesai; perbaikan template belum dilakukan.
+- Terbukti: src/app/globals.css:199 memakai @page size:auto dan margin 8mm. Kartu cetak dipusatkan horizontal/vertikal, lebar 90%, maksimal 420px, padding besar. Tidak ada aturan khusus 58mm. src/app/page.js:1244 hanya memanggil window.print(); QR di :1635 berukuran 190px sebelum padding. Aplikasi tidak menetapkan A4 secara eksplisit; konfigurasi printer/browser belum diperiksa.
+- Alur: activeQr -> kartu QR/SVG -> window.print -> CSS cetak -> dialog printer. Perbaikan yang diperlukan berada pada tata letak cetak, tanpa perubahan API/database.
+- Berikutnya: sesuaikan template roll 58mm, margin/area cetak sesuai perangkat, ukuran QR dan teks; verifikasi preview dan hasil scan cetakan. Belum mengubah kode aplikasi atau menguji printer fisik.
+- Pemeriksaan: catatan, git status/diff dan kode terkait. Perubahan pengguna/AI lain dipertahankan. Hanya catatan ditambahkan; lint/build tidak dijalankan karena kode aplikasi tidak diubah.
+- Backlog tetap: agregasi item soft-delete page.js:380/:556 masih tanpa filter deletedAt (diperiksa ulang statis); migrasi soft-delete dan uji end-to-end belum diverifikasi sesi ini; risiko concurrency order/pembayaran dari review sebelumnya belum diuji ulang.

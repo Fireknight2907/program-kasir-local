@@ -27,7 +27,7 @@ model Transaction {
   tableNumber   String?
   createdAt     DateTime  @default(now())
   completedAt   DateTime?
-  status        String    @default("open") // open, ordered, completed
+  status        String    @default("open") // open, ordered, completed, cancelled, deleted
   revision      Int       @default(0)
   paidTotal     Int?
   paidById      Int?
@@ -35,6 +35,8 @@ model Transaction {
   paymentMethod String?   // CASH, QRIS, CARD
   total         Int       @default(0)
   creationRequestId String? @unique // idempotency key for session creation (buka meja / take away)
+  deletedAt     DateTime? // soft-delete: transaksi tetap disimpan, tidak pernah benar-benar dihapus dari database
+  deletedById   Int?
   orders        Order[]
 }
 
@@ -60,6 +62,7 @@ model OrderItem {
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   quantity   Int
   price      Int // Price at the time of order
+  deletedAt  DateTime? // soft-delete: dihapus kasir lewat Edit Pesanan, tetap disimpan untuk jejak riwayat
 }
 
 model User {

@@ -20,7 +20,7 @@ export async function PUT(request,{params}) {
       if(session.revision!==expectedRevision)return {code:'ORDER_CONFLICT',error:'Pesanan berubah sejak edit dibuka. Buka kembali Edit Pesanan.'};
       const orders=await tx.order.findMany({where:{transactionId:id},include:{items:true}});
       const original=new Map(orders.flatMap(o=>o.items.map(i=>[i.id,{...i,order:o}])));
-      if(items.some(i=>i.itemId&&(!original.has(i.itemId)||original.get(i.itemId).menuItemId!==i.menuItemId)))return {code:'ORDER_CONFLICT',error:'Item asal tidak sesuai. Muat ulang pesanan.'};
+      if(items.some(i=>i.itemId&&(!original.has(i.itemId)||original.get(i.itemId).menuItemId!==i.menuItemId||original.get(i.itemId).deletedAt)))return {code:'ORDER_CONFLICT',error:'Item asal tidak sesuai. Muat ulang pesanan.'};
       const added=items.filter(i=>!i.itemId);
       const menu=await tx.menuItem.findMany({where:{id:{in:[...new Set(added.map(i=>i.menuItemId))]}}});
       const prices=new Map(menu.map(m=>[m.id,m]));
@@ -34,7 +34,10 @@ export async function PUT(request,{params}) {
         let changed=false,orderTotal=0;
         for(const item of order.items){
           const next=incoming.get(item.id);
-          if(!next){await tx.orderItem.delete({where:{id:item.id}});changed=true;}
+          if(!next){
+            // Soft delete: item tetap tersimpan (tampil dicoret di riwayat), tidak dihapus dari database.
+            if(!item.deletedAt){await tx.orderItem.update({where:{id:item.id},data:{deletedAt:new Date()}});changed=true;}
+          }
           else {orderTotal+=next.quantity*item.price;if(next.quantity!==item.quantity){await tx.orderItem.update({where:{id:item.id},data:{quantity:next.quantity}});changed=true;}}
         }
         if(changed)await tx.order.update({where:{id:order.id},data:{total:orderTotal,kitchenStatus:orderTotal===0&&!order.items.some(i=>incoming.has(i.id))?'cancelled':'queued',acceptedAt:null,acceptedById:null,kitchenVersion:{increment:1}}});

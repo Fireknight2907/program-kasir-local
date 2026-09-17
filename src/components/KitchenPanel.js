@@ -165,7 +165,7 @@ export default function KitchenPanel(){
        {/* Per-card action error — auto-clears after 5 s */}
        {orderErr&&<p role="alert" style={{fontSize:'.8rem',color:'#dc2626',marginBottom:8,fontWeight:600}}>⚠ {orderErr}</p>}
        <ul style={{paddingLeft:20,margin:'16px 0'}}>
-        {order.items.map(item=><li key={item.id}><strong>{item.quantity}×</strong> {item.menuItem.name}</li>)}
+        {order.items.map(item=><li key={item.id} style={item.deletedAt?{textDecoration:'line-through',color:'#ef4444'}:undefined}><strong>{item.quantity}×</strong> {item.menuItem.name}</li>)}
        </ul>
        {next[order.kitchenStatus]&&(
         // Only busy[order.id] disables the button — polling errors no longer block.

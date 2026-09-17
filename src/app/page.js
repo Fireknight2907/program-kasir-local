@@ -1228,7 +1228,7 @@ export default function CashierDashboard() {
   };
 
   const deleteTransaction = async (id) => {
-    if (!confirm('Yakin ingin menghapus transaksi ini secara permanen? Data tidak dapat dikembalikan.')) return;
+    if (!confirm('Yakin ingin menghapus transaksi ini? Transaksi akan ditandai terhapus (garis coret merah) dan tidak lagi dihitung di Statistik, tapi datanya tetap tersimpan.')) return;
     try {
       const res = await fetch(`/api/transaction/${id}`, {
         method: 'DELETE',
@@ -1258,7 +1258,7 @@ export default function CashierDashboard() {
   const openEditOrderModal = (trx) => {
     if (editOrderSavingRef.current) return;
     setEditingTransaction(trx);
-    setEditingOrderItems((trx.orders || []).flatMap(order => (order.items || []).map(item => ({
+    setEditingOrderItems((trx.orders || []).flatMap(order => (order.items || []).filter(item => !item.deletedAt).map(item => ({
       rowKey: 'existing:' + item.id, itemId: item.id, menuItem: item.menuItem,
       quantity: item.quantity, price: item.price, isTakeaway: order.isTakeaway, orderId: order.id
     }))));
@@ -1685,7 +1685,7 @@ export default function CashierDashboard() {
               {[...transactions]
                 .filter(trx => trx.tableNumber?.toLowerCase().includes(transactionSearch.toLowerCase()) || trx.id.toLowerCase().includes(transactionSearch.toLowerCase()))
                 .sort((a, b) => {
-                  const isKelar = (status) => status === 'completed' || status === 'cancelled';
+                  const isKelar = (status) => status === 'completed' || status === 'cancelled' || status === 'deleted';
                   const aKelar = isKelar(a.status) ? 1 : 0;
                   const bKelar = isKelar(b.status) ? 1 : 0;
                   if (aKelar !== bKelar) {
@@ -1697,7 +1697,7 @@ export default function CashierDashboard() {
                   return timeB - timeA;
                 })
                 .map(trx => (
-                  <div key={trx.id} className="glass-card flex flex-col justify-between h-full">
+                  <div key={trx.id} className="glass-card flex flex-col justify-between h-full" style={trx.status === 'deleted' ? { textDecoration: 'line-through', color: '#ef4444', border: '2px solid #ef4444', background: 'rgba(239,68,68,0.06)' } : undefined}>
                     <div>
                       <div className="flex justify-between items-start mb-2 gap-2">
                         <span style={{
@@ -1721,8 +1721,8 @@ export default function CashierDashboard() {
                             <Edit3 size={12} />
                           </button>
                         </span>
-                        <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`} style={{ textAlign: 'right' }}>
-                          {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
+                        <span className={`badge badge-${['cancelled', 'deleted'].includes(trx.status) ? 'danger' : trx.status}`} style={{ textAlign: 'right' }}>
+                          {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : trx.status === 'deleted' ? 'Dihapus' : 'Selesai'}
                         </span>
                       </div>
                       <div style={{ marginBottom: '0.85rem' }}>
@@ -1776,7 +1776,7 @@ export default function CashierDashboard() {
                                   {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
                                   <ul style={{ paddingLeft: '1rem', margin: 0 }}>
                                     {order.items.map(item => (
-                                      <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                      <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem', ...(item.deletedAt ? { textDecoration: 'line-through', color: '#ef4444' } : {}) }}>
                                         {item.quantity}x {item.menuItem?.name || 'Item'}
                                         <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
                                       </li>
@@ -1816,7 +1816,7 @@ export default function CashierDashboard() {
                         </button>
                       )}
                       <div className="grid grid-cols-2 gap-2">
-                        {trx.status !== 'completed' && trx.status !== 'cancelled' && (
+                        {trx.status !== 'completed' && trx.status !== 'cancelled' && trx.status !== 'deleted' && (
                           <>
                             <button
                               className="btn btn-outline"
@@ -1842,7 +1842,7 @@ export default function CashierDashboard() {
                             </button>
                           </>
                         )}
-                        {currentUser?.role === 'ADMIN' && (
+                        {currentUser?.role === 'ADMIN' && trx.status !== 'deleted' && (
                           <button
                             className="btn btn-danger"
                             onClick={() => deleteTransaction(trx.id)}
@@ -2584,7 +2584,7 @@ export default function CashierDashboard() {
               <div className="grid grid-cols-2">
                 {[...archiveTransactions]
                   .sort((a, b) => {
-                    const isKelar = (status) => status === 'completed' || status === 'cancelled';
+                    const isKelar = (status) => status === 'completed' || status === 'cancelled' || status === 'deleted';
                     const aKelar = isKelar(a.status) ? 1 : 0;
                     const bKelar = isKelar(b.status) ? 1 : 0;
                     if (aKelar !== bKelar) {
@@ -2595,7 +2595,7 @@ export default function CashierDashboard() {
                     return timeB - timeA;
                   })
                   .map(trx => (
-                    <div key={trx.id} className="glass-card flex flex-col justify-between" style={{ opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
+                    <div key={trx.id} className="glass-card flex flex-col justify-between" style={trx.status === 'deleted' ? { textDecoration: 'line-through', color: '#ef4444', border: '2px solid #ef4444', background: 'rgba(239,68,68,0.06)' } : { opacity: trx.status === 'cancelled' ? 0.7 : 1 }}>
                       <div>
                         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                           <div className="flex items-center gap-2">
@@ -2611,8 +2611,8 @@ export default function CashierDashboard() {
                             </span>
                             <h3 style={{ margin: 0, fontSize: '0.95rem' }}>ID: {trx.id.substring(0, 16)}...</h3>
                           </div>
-                          <span className={`badge badge-${trx.status === 'cancelled' ? 'danger' : trx.status}`}>
-                            {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : 'Selesai'}
+                          <span className={`badge badge-${['cancelled', 'deleted'].includes(trx.status) ? 'danger' : trx.status}`}>
+                            {trx.status === 'open' ? 'Menunggu Pesanan' : trx.status === 'ordered' ? 'Perlu Dibayar' : trx.status === 'cancelled' ? 'Dibatalkan' : trx.status === 'deleted' ? 'Dihapus' : 'Selesai'}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.03)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.85rem' }}>
@@ -2662,7 +2662,7 @@ export default function CashierDashboard() {
                                     {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
                                     <ul style={{ paddingLeft: '1rem', margin: 0 }}>
                                       {order.items.map(item => (
-                                        <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                        <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem', ...(item.deletedAt ? { textDecoration: 'line-through', color: '#ef4444' } : {}) }}>
                                           {item.quantity}x {item.menuItem?.name || 'Item'}
                                           <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
                                         </li>
@@ -2689,22 +2689,24 @@ export default function CashierDashboard() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 mt-auto pt-4">
-                        <button
-                          className="btn btn-outline"
-                          onClick={() => openEditOrderModal(trx)}
-                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
-                        >
-                          <Edit3 size={16} style={{ marginRight: '4px' }} /> Edit
-                        </button>
-                        <button
-                          className="btn btn-danger"
-                          onClick={() => deleteTransaction(trx.id)}
-                          style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
-                        >
-                          <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
-                        </button>
-                      </div>
+                      {trx.status !== 'deleted' && (
+                        <div className="grid grid-cols-2 gap-2 mt-auto pt-4">
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => openEditOrderModal(trx)}
+                            style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%' }}
+                          >
+                            <Edit3 size={16} style={{ marginRight: '4px' }} /> Edit
+                          </button>
+                          <button
+                            className="btn btn-danger"
+                            onClick={() => deleteTransaction(trx.id)}
+                            style={{ fontSize: '0.85rem', padding: '0.4rem', width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
+                          >
+                            <Trash2 size={16} style={{ marginRight: '4px' }} /> Hapus
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 {archiveTransactions.length === 0 && !loadingArchive && (
