@@ -302,3 +302,175 @@ Pengguna laporkan 2 masalah setelah sesi sebelumnya:
 - Berikutnya: sesuaikan template roll 58mm, margin/area cetak sesuai perangkat, ukuran QR dan teks; verifikasi preview dan hasil scan cetakan. Belum mengubah kode aplikasi atau menguji printer fisik.
 - Pemeriksaan: catatan, git status/diff dan kode terkait. Perubahan pengguna/AI lain dipertahankan. Hanya catatan ditambahkan; lint/build tidak dijalankan karena kode aplikasi tidak diubah.
 - Backlog tetap: agregasi item soft-delete page.js:380/:556 masih tanpa filter deletedAt (diperiksa ulang statis); migrasi soft-delete dan uji end-to-end belum diverifikasi sesi ini; risiko concurrency order/pembayaran dari review sebelumnya belum diuji ulang.
+
+---
+
+## 2026-09-18 07:30 Asia/Taipei — Codex: laporan harian
+
+- Selesai: review catatan, status staged/unstaged/untracked, commit dan implementasi terkait. Trigger diterima sekitar 07:29 Taiwan, terlambat dari jadwal 05:00; penyebab belum diperiksa. Baseline baru e3dad220a2e0463cc87498f4254676291964c233 (Rev 5.5, 18 September 00:50 Taiwan).
+- Dibanding laporan 17 September: implementasi soft-delete yang kemarin belum di-commit sekarang masuk commit e3dad22. Lima file produk tetap menunjukkan perubahan kumulatif 58 baris tambah/42 hapus terhadap ec35c98; ini pekerjaan yang sudah dilaporkan kemarin, bukan fitur tambahan hari ini. Sebelum penambahan laporan ini, tidak ada perubahan tracked staged/unstaged. .claude/settings.local.json tetap untracked dan isinya tidak diperiksa.
+- Arsitektur/alur soft-delete tetap: API menandai transaksi/item di database alih-alih menghapus baris; tiga kolom audit baru; staf melihat coretan dan customer menerima item aktif. Berguna untuk jejak koreksi, bukan sekadar kosmetik. Commit tidak membuktikan migrasi atau kesiapan operasional.
+- Task baru dalam catatan: tata letak cetak QR roll 58mm. Diagnosis diperiksa ulang: src/app/globals.css:199-239 memakai size:auto, margin 8mm, kartu dipusatkan dengan max-width 420px dan padding besar; src/app/page.js:1635 QR 190px, :1245 window.print. CSS tidak berubah sejak ec35c98. Diagnosis selesai, perbaikan dan uji cetak/scan belum dilakukan. Relevan untuk keterbacaan QR/perangkat nyata; perubahan cukup pada template cetak tanpa API/database. Jangan samakan cetak QR dengan integrasi struk dapur. Konfigurasi printer/browser belum diperiksa, jadi belum menyatakan penyebab cetak hanya CSS atau aplikasi memaksa A4.
+- P1 tetap terbuka: agregasi item terhapus pada src/app/page.js:380 dan :556 masih tidak menyaring deletedAt. Bukti eksekusi 17 September tetap relevan: item aktif Rp10.000 + terhapus Rp20.000 menghasilkan rekap salah Rp30.000/2 item sementara pembayaran Rp10.000. Hari ini verifikasi statis; tidak mengulang tes identik. Task manager: perbaiki agregasi rekap/statistik/ekspor dan uji konsistensi dengan pembayaran.
+- P1 tetap terbuka: src/app/api/order/route.js tidak berubah dari ec35c98; validasi status/batas di luar transaksi dan penulisan tanpa revalidasi tetap berisiko bentrok dengan pembayaran/penghapusan sesi. Dampak concurrency belum direproduksi. Task manager: uji request bersamaan dan pulihkan konsistensi berdasarkan hasil.
+- Migrasi soft-delete: tidak ada konfirmasi penyelesaian baru dalam catatan. Ketiadaan kolom produksi merupakan laporan Claude 17 September; database live tidak diakses pada review ini. Manager perlu memverifikasi status migrasi sebelum menyatakan fitur siap, lalu uji browser. Backlog lain tetap: printer struk dapur, keputusan bisnis statistik/durasi take away/reset kitchenStatus, dan uji browser alur terkait.
+- Tidak ada klaim perbaikan baru untuk bug prioritas. Pemeriksaan read-only pada kode/Git; tidak menjalankan lint/build/browser/DB atau mengubah kode aplikasi. Hanya laporan ini ditambahkan dan hasil lengkap disampaikan di task agar manager tidak perlu akses file lokal.
+
+---
+
+## 2026-09-18 — Claude Sonnet 5
+
+### Tugas
+Perbaiki template cetak QR Code meja (`window.print()`) yang sebelumnya berbasis kertas HVS/A4, ubah jadi format struk printer thermal 58mm. Melanjutkan backlog yang sudah didiagnosis Codex di entri "diagnosis cetak QR 58 mm" (2026-09-18) di atas — diagnosis itu benar (`@page size:auto` + kartu max-width 420px terbukti setelah dibaca ulang), sesi ini mengerjakan perbaikannya.
+
+### Perubahan kode
+- `src/app/globals.css:199-` (blok `@page` dan `@media print`):
+  - `@page { size: auto; margin: 8mm; }` → `@page { size: 58mm auto; margin: 0; }` (lebar tetap 58mm, tinggi mengikuti panjang isi — sesuai printer roll/continuous form thermal, bukan kertas ukuran tetap).
+  - `.print-qr-card`: `position: fixed; left/top:50%; transform:translate(-50%,-50%); max-width:420px; padding:1.25rem 1.5rem; border:2px dashed` diganti jadi `position:absolute; top:0; left:0; width:58mm; padding:2mm 3mm; border:none`. Centering 50%/50% dihapus karena tidak valid untuk halaman `auto`-height (continuous roll tidak punya tinggi tetap untuk dihitung persentasenya); posisi kini menempel pojok kiri-atas kertas dan lebar kartu = lebar kertas penuh.
+  - Tambah aturan print baru untuk kelas `.qr-badge`, `.qr-title`, `.qr-instruction`, `.qr-container svg` (dipaksa 38mm x 38mm), `.qr-time-info`, `.qr-trx-code` — semua font-size diperkecil ke satuan pt kecil (6.5pt–10pt) dan padding ke satuan mm supaya proporsional di kertas sempit 58mm.
+- `src/app/page.js` (sekitar baris 1614-1667): tambah `className="qr-badge"`, `"qr-title"`, `"qr-instruction"`, `"qr-trx-code"` pada elemen-elemen di dalam kartu QR (badge nomor meja, judul, instruksi scan, paragraf kode transaksi) — sebelumnya elemen ini hanya punya inline style sehingga tidak bisa ditarget CSS print secara presisi. Tidak ada logika/fungsi yang diubah, hanya penambahan className.
+
+### Keputusan penting & alasan
+- Tetap pakai mekanisme lama "`visibility:hidden` pada semua elemen body lalu `visibility:visible` khusus `.print-qr-card`" (bukan refactor total) karena mekanisme ini sudah terbukti berjalan untuk kasus A4 sebelumnya — risiko lebih rendah daripada mengganti pendekatan.
+- Ukuran QR SVG dipaksa 38mm via CSS (`.qr-container svg`), bukan mengubah prop `size={190}` di `QRCodeSVG` pada `page.js`, supaya tampilan di layar (screen, `size=190`) tetap sama seperti sebelumnya dan hanya hasil cetak yang menyesuaikan ukuran kertas.
+- Border dekoratif dashed pada kartu dihapus saat print (tetap ada saat di layar) karena struk thermal umumnya polos/hemat tinta panas, dan lebar 58mm terlalu sempit untuk border+padding besar ala HVS.
+
+### Pengujian
+- `npm run lint -- src/app/page.js src/app/globals.css`: **tidak ada error/warning baru**. 6 error + 7 warning yang muncul semuanya pra-existing di baris lain (894-929 `setState` dalam `useEffect`, 3218/3621/3806 pemakaian `<img>`), sudah ada sebelum perubahan ini dan tidak berkaitan dengan kartu cetak QR.
+- **Belum diuji**: preview cetak langsung di browser (Ctrl+P) dan cetak fisik ke printer thermal 58mm sungguhan untuk memastikan QR masih bisa di-scan dan tidak terpotong. Sesi ini adalah CLI-only, tidak ada akses ke printer/browser untuk verifikasi visual.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Pengguna perlu coba cetak nyata (atau preview cetak Chrome dengan "Save as PDF" + pilih ukuran kertas custom 58mm) untuk pastikan: QR masih terbaca saat di-scan, teks tidak terpotong/tumpang tindih, dan tidak ada halaman kosong tambahan setelah struk.
+- Kalau printer fisik ternyata punya printable width < 58mm (banyak printer 58mm punya area cetak efektif ~48-50mm), mungkin perlu kecilkan lagi lebar `.print-qr-card` dan ukuran QR (`.qr-container svg`) — laporkan hasil cetak fisiknya supaya bisa disesuaikan.
+- Backlog lama tetap belum disentuh sesi ini (di luar scope tugas): agregasi item soft-delete `page.js:380`/`:556` tanpa filter `deletedAt`, migrasi soft-delete di produksi belum diverifikasi, risiko concurrency `api/order/route.js`, printer struk dapur.
+
+---
+
+## 2026-09-19 — Claude Sonnet 5
+
+### Tugas
+Di kartu daftar transaksi (tab Transaksi & tab Arsip): (1) item pesanan yang ditandai terhapus (soft-delete, ditampilkan coret merah) harus selalu ditaruh paling bawah dalam daftar menu pesanan; (2) label "Pesanan Tambahan" yang sebelumnya berwarna merah diubah jadi hijau (supaya tidak tertukar makna dengan warna merah = item dihapus).
+
+### Perubahan kode
+- `src/app/page.js` — ada 2 lokasi identik yang render daftar item per-order di dalam kartu transaksi (tab Transaksi sekitar baris 1773-1779, tab Arsip sekitar baris 2660-2665):
+  - `order.items.map(item => ...)` → `[...order.items].sort((a, b) => (a.deletedAt ? 1 : 0) - (b.deletedAt ? 1 : 0)).map(item => ...)`. Item dengan `deletedAt` terisi (soft-deleted) didorong ke akhir array; item lain tetap urut seperti semula (sort stabil di JS modern, jadi relative order item aktif tidak berubah).
+  - Warna label "Pesanan Tambahan" (`<p>` yang muncul saat `orderIdx > 0`, menandai order susulan di luar pesanan pertama) diubah dari `color: '#ef4444'` (merah) jadi `color: '#16a34a'` (hijau). Warna coret-merah untuk item `deletedAt` (`#ef4444`, di elemen `<li>`) **tidak diubah** — tetap merah sesuai konfirmasi pengguna, itu bukan bagian yang diminta ganti warna.
+
+### Keputusan penting & alasan
+- Sorting hanya memindahkan item terhapus ke bawah **dalam lingkup satu order** (satu "Pesanan Utama"/"Pesanan Tambahan"), bukan digabung lintas semua order dalam satu transaksi — karena struktur tampilan memang per-order (tiap order py sub-list `<ul>` sendiri dengan judul "Pesanan Tambahan" di atasnya), memindah lintas-order akan merusak pengelompokan yang sudah ada dan mengubah makna "Pesanan Tambahan ke-2, ke-3", dst.
+- Tidak mengubah `src/app/api/transaction/route.js` atau `[id]/route.js` (sumber data `order.items`) — ini murni perubahan tampilan/urutan render di client, data & urutan asli dari API tidak diubah.
+
+### Pengujian
+- `npm run lint -- src/app/page.js`: **tidak ada error/warning baru**. 6 error + 6 warning yang muncul semuanya pra-existing (baris 894-929 `setState` dalam `useEffect`, 3218/3621/3806 pemakaian `<img>`), tidak berkaitan dengan perubahan ini.
+- **Belum diuji manual di browser**: perlu buka tab Transaksi/Arsip dengan transaksi yang punya item ter-soft-delete campur dengan item aktif, pastikan item merah selalu di bawah dan label "Pesanan Tambahan" tampil hijau.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual di browser dengan data yang punya kombinasi item aktif + item dihapus + lebih dari 1 order (untuk lihat label "Pesanan Tambahan" hijau dan urutan item).
+- Backlog lama tetap belum disentuh (di luar scope): agregasi item soft-delete `page.js:380`/`:556` tanpa filter `deletedAt`, migrasi soft-delete produksi, risiko concurrency `api/order/route.js`, printer struk dapur.
+
+---
+
+## 2026-09-19 (lanjutan) — Claude Sonnet 5
+
+### Tugas
+Koreksi dari pengguna atas pekerjaan sebelumnya: sorting item terhapus "dalam satu order" ternyata belum sesuai maksud. Yang diminta: item yang dihapus harus **selalu di paling bawah dari SELURUH daftar pesanan dalam satu transaksi** — di bawah semua grup "Pesanan Tambahan" maupun grup "Take Away", bukan cuma di bawah dalam grup order-nya sendiri.
+
+### Perubahan kode
+- `src/app/page.js` — 2 lokasi yang sama (tab Transaksi ±baris 1772-1808, tab Arsip ±baris 2684-2719), diganti totalnya dari "sort per-order" jadi **pisah & kumpulkan lintas semua order**:
+  - Dibungkus IIFE: hitung `sortedOrders` (urut oleh `createdAt`, sama seperti sebelumnya) dan `deletedItems` = `flatMap` semua `order.items` yang punya `deletedAt` dari SEMUA order dalam transaksi tsb.
+  - Tiap order group (`Pesanan Utama` / `Pesanan Tambahan` / badge `Bungkus (Take Away)`) sekarang hanya me-render `activeItems` (item yang `!deletedAt`). Kalau suatu order isinya cuma item terhapus semua, group order itu tidak dirender sama sekali (`return null`) — babel karena tidak ada lagi item aktif untuk ditampilkan di situ.
+  - Setelah semua order group dirender, baru muncul **satu section terpisah di paling bawah**: label "Item Dihapus" (ikon `Trash2`, teks merah) + daftar semua item `deletedAt` yang sudah dikumpulkan tadi (coret merah), dipisah garis putus-putus dari daftar di atasnya. Ini yang membuat item terhapus **selalu di bawah semuanya**, termasuk di bawah grup "Pesanan Tambahan" dan "Take Away", sesuai koreksi pengguna.
+
+### Keputusan penting & alasan
+- Label baru "Item Dihapus" (bukan cuma mengandalkan warna merah+coret) ditambahkan supaya jelas kenapa item-item itu terpisah dari grup order aslinya — tanpa label, campuran item dari beberapa order berbeda di satu blok bawah tanpa konteks order asal akan membingungkan kasir.
+- Order yang seluruh isinya sudah dihapus (activeItems kosong) tidak lagi menampilkan header/grup kosong — mencegah "Pesanan Tambahan" atau badge "Bungkus (Take Away)" nongol tanpa isi apa pun di bawahnya.
+- `trx.orders.sort(...)` tetap dipanggil langsung di array asli (bukan disalin `[...trx.orders]`) — konsisten dengan gaya kode sebelumnya di file ini, bukan sesuatu yang diubah sesi ini.
+
+### Pengujian
+- `npm run lint -- src/app/page.js`: **tidak ada error/warning baru** di kedua lokasi yang diubah. 6 error + 6 warning yang tampil semuanya pra-existing (baris `useEffect`/`setState` dan pemakaian `<img>`), tidak berkaitan dengan perubahan ini.
+- **Belum diuji manual di browser.** Perlu dicoba dengan data nyata: transaksi yang punya beberapa order (utama + tambahan, ada yang take away), dan sebagian item di masing-masing order ditandai dihapus — pastikan semua item merah berkumpul di satu blok paling bawah, dan grup order yang jadi kosong akibat semua isinya dihapus tidak menampilkan header kosong.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual di browser sesuai skenario di atas (kombinasi order utama + tambahan + take away + campuran item aktif/dihapus).
+- Backlog lama tetap belum disentuh (di luar scope): agregasi item soft-delete `page.js:380`/`:556` tanpa filter `deletedAt` di rekap/statistik, migrasi soft-delete produksi, risiko concurrency `api/order/route.js`, printer struk dapur.
+
+---
+
+## 2026-09-19 (lanjutan 2) — Claude Sonnet 5
+
+### Tugas
+Rapikan lagi template cetak QR 58mm (melanjutkan [[Rev 2026-09-18]] soal ukuran kertas): pengguna minta struktur cetak dibatasi jadi persis 4 bagian, urut dari atas — (1) nomor meja, (2) QR code, (3) tulisan "Scan Untuk Pesan", (4) tanggal & jam QR dibuat — dan semuanya harus jelas/mudah dibaca di struk.
+
+### Perubahan kode
+- `src/app/page.js` (kartu `.print-qr-card`, ±baris 1614-1679):
+  - Tambah `no-print` pada `<h2 className="qr-title">` (judul "QR Code Pesanan Meja X") dan `<p className="qr-instruction">` (kalimat instruksi panjang) — dua elemen ini tetap tampil di layar untuk staf, tapi disembunyikan saat dicetak karena bukan bagian dari 4 struktur yang diminta.
+  - Tambah elemen baru `<p className="qr-scan-text">SCAN UNTUK PESAN</p>` setelah kotak QR — elemen ini kebalikannya: disembunyikan di layar (`display:none` default), hanya muncul saat print. Ini bagian #3.
+  - Tambah `no-print` pada label kecil "Waktu QR Code Dibuat" di dalam `.qr-time-info` (captionnya saja, bukan seluruh box) supaya saat cetak yang tampil cuma baris tanggal+jam polos (bagian #4), tanpa label berulang.
+  - Tambah `no-print` pada paragraf "Kode Transaksi" — tidak termasuk 4 bagian yang diminta, disembunyikan dari hasil cetak (tetap tampil di layar).
+  - Badge nomor meja (`.qr-badge`, bagian #1) dan kotak QR (`.qr-container`, bagian #2) tidak diubah strukturnya, cuma ukuran cetaknya diperbesar (lihat CSS).
+- `src/app/globals.css` (blok `@media print`):
+  - Hapus aturan print untuk `.qr-title`, `.qr-instruction`, `.qr-trx-code` (jadi dead code karena elemen-elemen itu sekarang `no-print`/disembunyikan total saat cetak).
+  - Tambah aturan dasar (di luar `@media print`) `.qr-scan-text { display: none; }` supaya teks "SCAN UNTUK PESAN" default tersembunyi di layar, lalu di dalam `@media print` di-`display:block` dengan font 11pt bold.
+  - `.qr-badge` diperbesar dari 10pt → 15pt (nomor meja jadi elemen paling mencolok, sesuai urutan #1).
+  - `.qr-container svg` (ukuran QR saat cetak) diperbesar sedikit dari 38mm → 40mm.
+  - `.qr-time-info *` (baris tanggal & jam) font dari 7pt → 9pt dan ditambah `font-weight:700` supaya lebih mudah dibaca di struk kecil.
+
+### Keputusan penting & alasan
+- Elemen yang disembunyikan saat print (judul h2, instruksi panjang, kode transaksi) **tetap ada dan tampil di layar** — perubahan ini murni soal apa yang tercetak di kertas 58mm, tidak mengurangi informasi yang dilihat kasir di aplikasi.
+- "SCAN UNTUK PESAN" dibuat sebagai elemen terpisah (bukan mengubah teks instruksi lama) karena instruksi lama ("Scan QR Code di bawah untuk melihat menu...") masih relevan untuk tampilan layar, sedangkan versi cetak butuh teks pendek yang jelas terbaca dari jarak biasa di meja restoran.
+- Ukuran font dinaikkan cukup signifikan (badge 10pt→15pt, tanggal/jam 7pt→9pt) merespons permintaan eksplisit "buat menjadi jelas agar bisa dibaca" — printer thermal 58mm umumnya mendukung ukuran ini tanpa masalah pemotongan, mengingat lebar cetak sudah dikunci 58mm dan padding kartu sudah kecil (2mm/3mm).
+
+### Pengujian
+- `npm run lint -- src/app/page.js src/app/globals.css`: hasil 13 problems (6 error, 7 warning) — **tidak ada error baru**, jumlah error tetap 6 (sama seperti seluruh sesi sebelumnya di file ini). Sempat terlihat beda jumlah warning (6 vs 7) dibanding run sebelumnya, tapi setelah dicek ulang tanpa `| tail -50` itu cuma efek pemotongan output oleh `tail`, bukan warning baru — warning "missing dependency: fetchArchive" di baris 898 (jauh dari area yang diubah, ±baris 1611-1679/1770-1815/2657-2719) sudah pra-existing.
+- **Belum diuji**: preview cetak (Ctrl+P) maupun cetak fisik ke printer 58mm untuk pastikan 4 bagian tersusun rapi dan tidak overflow/terpotong dengan ukuran font baru yang lebih besar.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Cek preview cetak/cetak fisik: pastikan badge nomor meja 15pt tidak terlalu besar sampai terpotong untuk nomor meja yang panjang (mis. "TAKE AWAY - Nama Pelanggan Panjang"), dan QR 40mm + teks di bawahnya masih pas dalam satu struk tanpa terpotong halaman.
+- Backlog lama tetap belum disentuh (di luar scope): agregasi item soft-delete `page.js:380`/`:556`, migrasi soft-delete produksi, risiko concurrency `api/order/route.js`, printer struk dapur.
+
+---
+
+## 2026-09-19 (lanjutan 3) — Claude Sonnet 5
+
+### Tugas
+Lanjutan revisi template cetak QR: badge nomor meja (bagian #1) diminta warnanya jadi hitam dan dibuat lebih jelas/lebih besar.
+
+### Perubahan kode
+- `src/app/globals.css` — aturan `@media print .qr-badge` (sekitar baris 254-266) diubah total:
+  - Sebelumnya: kotak solid `background:#000000` + `color:#ffffff` (teks putih di atas kotak hitam), `font-size:15pt`.
+  - Sekarang: `background:transparent`, `color:#000000` (teks hitam tebal `font-weight:900`), dikelilingi `border:2.5px solid #000000` sebagai pengganti kotak solid, `font-size:22pt`.
+- Alasan ganti dari kotak solid ke border: kotak `background` solid pada CSS print **butuh opsi "Print background graphics" aktif di dialog print browser** (Chrome/Edge defaultnya kadang mati). Kalau opsi itu mati, kotak hitamnya tidak ikut tercetak sama sekali, sehingga teks putih di atasnya jadi tak kelihatan (putih di atas kertas putih). Border tidak bergantung pada opsi itu, jadi teks hitam + garis kotak dijamin tercetak apa pun pengaturan browsernya. Ini kemungkinan besar akar masalah "warna meja belum hitam" yang dilaporkan pengguna.
+
+### Pengujian
+- Perubahan CSS-only, tidak menjalankan lint (tidak ada file JS yang diubah pada langkah ini).
+- **Belum diuji**: preview/cetak fisik untuk pastikan border+teks 22pt bold tidak terpotong untuk nomor meja/label take away yang panjang, dan benar-benar tercetak hitam jelas di printer thermal asli.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji cetak fisik untuk badge nomor meja (border + teks hitam 22pt) — pastikan jelas terbaca dan tidak terpotong.
+- Backlog lama tetap belum disentuh (di luar scope): agregasi item soft-delete `page.js:380`/`:556`, migrasi soft-delete produksi, risiko concurrency `api/order/route.js`, printer struk dapur.
+
+---
+
+## 2026-09-19 (lanjutan 4) — Claude Sonnet 5
+
+### Tugas
+Pengguna laporkan hasil cetak QR tidak simetris/miring — diminta dibuat rata tengah.
+
+### Perubahan kode
+- `src/app/globals.css` — `@media print .print-qr-card` (±baris 226-247):
+  - Sebelumnya: `position:absolute; left:0; width:58mm` — kartu menempel persis di tepi kiri kertas, memenuhi lebar penuh 58mm.
+  - Sekarang: `position:absolute; left:50%; transform:translateX(-50%); width:48mm` — kartu di-center secara matematis relatif ke lebar halaman (nominal 58mm), dengan lebar konten dipersempit ke 48mm (sisa ±5mm buffer di kiri-kanan).
+  - Padding kartu diganti dari `2mm 3mm` (ada padding horizontal) jadi `2mm 0` (padding horizontal dihapus, karena buffer kiri-kanan sudah didapat dari mempersempit lebar kartu ke 48mm, bukan dari padding).
+  - Tambah `display:flex; flex-direction:column; align-items:center; text-align:center` langsung di CSS print supaya semua isi kartu (badge, QR, teks) tetap center meski override lain terjadi — pelengkap className Tailwind `flex flex-col items-center text-center` yang sudah ada di JSX.
+
+### Keputusan penting & alasan
+- Root cause dugaan: banyak printer thermal 58mm punya **area cetak efektif yang lebih sempit dari 58mm nominal** (umum ~48-50mm) dan/atau area cetaknya tidak persis di tengah gulungan kertas secara fisik. Saat kartu dipaksa `width:58mm` menempel di `left:0`, kalau printer cuma bisa cetak ±48-50mm dari titik tertentu, sebagian kanan/kiri konten bisa kepotong atau bergeser — inilah yang kemungkinan besar terlihat sebagai "miring"/tidak simetris oleh pengguna, bukan rotasi sungguhan (tidak ada CSS rotate/skew di kode).
+- Solusi mempersempit ke 48mm + center matematis (`left:50%` + `translateX(-50%)`) dipilih ketimbang cuma menambah `margin:auto`, karena kartu memakai `position:absolute` (diperlukan supaya tidak ikut ke-clip oleh elemen lain yang disembunyikan `visibility:hidden` di sekitarnya — lihat rev sebelumnya) dan elemen `position:absolute` tidak bisa di-center pakai `margin:auto` tanpa `left`+`right` eksplisit; kombinasi `left:50%`+`transform:translateX(-50%)` adalah cara standar CSS untuk center elemen absolute apa pun lebar kontennya.
+
+### Pengujian
+- Perubahan CSS-only, tidak menjalankan lint (tidak ada file JS yang diubah).
+- **Belum diuji cetak fisik** — perlu dicoba lagi di printer yang sama yang sebelumnya menghasilkan cetakan miring, untuk konfirmasi apakah 48mm+center sudah cukup atau perlu dipersempit lagi (mis. ke 44-46mm) tergantung area cetak riil printer tsb.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Pengguna perlu coba cetak ulang dan konfirmasi apakah sudah simetris. Kalau masih miring/kepotong di satu sisi, kemungkinan area cetak fisik printer memang tidak center secara hardware (bukan bisa diperbaiki lewat CSS) — perlu info merk/model printer & foto hasil cetak untuk diagnosis lanjut.
+- Backlog lama tetap belum disentuh (di luar scope): agregasi item soft-delete `page.js:380`/`:556`, migrasi soft-delete produksi, risiko concurrency `api/order/route.js`, printer struk dapur.

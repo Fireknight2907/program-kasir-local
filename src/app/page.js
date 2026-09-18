@@ -1612,7 +1612,7 @@ export default function CashierDashboard() {
             const dt = formatDateTimeIndonesian(activeQr.createdAt);
             return (
               <div className="glass-card print-qr-card mb-4 flex flex-col items-center text-center p-5" style={{ border: '2px solid var(--primary-color)' }}>
-                <div style={{
+                <div className="qr-badge" style={{
                   background: 'var(--primary-color)',
                   color: 'white',
                   padding: '0.35rem 1.2rem',
@@ -1624,16 +1624,18 @@ export default function CashierDashboard() {
                 }}>
                   {activeQr.tableNumber?.toLowerCase().includes('take away') ? activeQr.tableNumber : `MEJA ${activeQr.tableNumber}`}
                 </div>
-                <h2 style={{ fontSize: '1.3rem', margin: 0, fontWeight: 700 }}>
+                <h2 className="qr-title no-print" style={{ fontSize: '1.3rem', margin: 0, fontWeight: 700 }}>
                   QR Code Pesanan {activeQr.tableNumber?.toLowerCase().includes('take away') ? activeQr.tableNumber : `Meja ${activeQr.tableNumber}`}
                 </h2>
-                <p style={{ margin: '0.3rem 0 0.6rem 0', fontSize: '0.85rem', opacity: 0.85 }}>
+                <p className="qr-instruction no-print" style={{ margin: '0.3rem 0 0.6rem 0', fontSize: '0.85rem', opacity: 0.85 }}>
                   Scan QR Code di bawah untuk melihat menu & melakukan pemesanan makanan/minuman.
                 </p>
 
                 <div className="qr-container my-1 p-2.5" style={{ background: '#ffffff', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'inline-block' }}>
                   <QRCodeSVG value={activeQr.url} size={190} />
                 </div>
+
+                <p className="qr-scan-text">SCAN UNTUK PESAN</p>
 
                 {/* Information Badge for Hari, Tanggal, Jam saat QR dibuat */}
                 <div className="qr-time-info mt-2 mb-2 p-2.5" style={{
@@ -1646,7 +1648,7 @@ export default function CashierDashboard() {
                   flexDirection: 'column',
                   gap: '4px'
                 }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <div className="no-print" style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Waktu QR Code Dibuat
                   </div>
                   <div className="flex justify-center items-center gap-4 flex-wrap" style={{ fontSize: '0.88rem', fontWeight: 600 }}>
@@ -1661,7 +1663,7 @@ export default function CashierDashboard() {
                   </div>
                 </div>
 
-                <p style={{ fontSize: '0.8rem', wordBreak: 'break-all', opacity: 0.8, maxWidth: '420px', marginTop: '0.4rem', marginBottom: '0.2rem' }}>
+                <p className="qr-trx-code no-print" style={{ fontSize: '0.8rem', wordBreak: 'break-all', opacity: 0.8, maxWidth: '420px', marginTop: '0.4rem', marginBottom: '0.2rem' }}>
                   Kode Transaksi: <code style={{ background: 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '4px' }}>{activeQr.id}</code>
                 </p>
                 <p className="no-print" style={{ fontSize: '0.78rem', opacity: 0.7, margin: 0 }}>
@@ -1770,20 +1772,45 @@ export default function CashierDashboard() {
                           <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
                           <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
                             <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
-                              {trx.orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
-                                <div key={order.id} style={{ marginBottom: '0.5rem' }}>
-                                  {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
-                                  {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
-                                  <ul style={{ paddingLeft: '1rem', margin: 0 }}>
-                                    {order.items.map(item => (
-                                      <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem', ...(item.deletedAt ? { textDecoration: 'line-through', color: '#ef4444' } : {}) }}>
-                                        {item.quantity}x {item.menuItem?.name || 'Item'}
-                                        <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ))}
+                              {(() => {
+                                const sortedOrders = trx.orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                                const deletedItems = sortedOrders.flatMap(order => (order.items || []).filter(item => item.deletedAt));
+                                return (
+                                  <>
+                                    {sortedOrders.map((order, orderIdx) => {
+                                      const activeItems = (order.items || []).filter(item => !item.deletedAt);
+                                      if (activeItems.length === 0) return null;
+                                      return (
+                                        <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                                          {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
+                                          {order.isTakeaway && <div style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginBottom: '4px' }}>Bungkus (Take Away)</div>}
+                                          <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                            {activeItems.map(item => (
+                                              <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                                {item.quantity}x {item.menuItem?.name || 'Item'}
+                                                <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      );
+                                    })}
+                                    {deletedItems.length > 0 && (
+                                      <div style={{ marginTop: '0.5rem', paddingTop: '0.35rem', borderTop: '1px dashed rgba(239,68,68,0.35)' }}>
+                                        <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Trash2 size={12} style={{ display: 'inline', marginRight: '2px' }} /> Item Dihapus</p>
+                                        <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                          {deletedItems.map(item => (
+                                            <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem', textDecoration: 'line-through', color: '#ef4444' }}>
+                                              {item.quantity}x {item.menuItem?.name || 'Item'}
+                                              <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </ul>
                           </div>
                         </div>
@@ -2657,19 +2684,44 @@ export default function CashierDashboard() {
                             <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.35rem' }}>Daftar Pesanan:</p>
                             <div className="custom-scrollbar" style={{ height: '180px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.02)' }}>
                               <ul style={{ paddingLeft: '1rem', marginTop: '0', marginBottom: '0' }}>
-                                {trx.orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map((order, orderIdx) => (
-                                  <div key={order.id} style={{ marginBottom: '0.5rem' }}>
-                                    {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
-                                    <ul style={{ paddingLeft: '1rem', margin: 0 }}>
-                                      {order.items.map(item => (
-                                        <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem', ...(item.deletedAt ? { textDecoration: 'line-through', color: '#ef4444' } : {}) }}>
-                                          {item.quantity}x {item.menuItem?.name || 'Item'}
-                                          <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ))}
+                                {(() => {
+                                  const sortedOrders = trx.orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                                  const deletedItems = sortedOrders.flatMap(order => (order.items || []).filter(item => item.deletedAt));
+                                  return (
+                                    <>
+                                      {sortedOrders.map((order, orderIdx) => {
+                                        const activeItems = (order.items || []).filter(item => !item.deletedAt);
+                                        if (activeItems.length === 0) return null;
+                                        return (
+                                          <div key={order.id} style={{ marginBottom: '0.5rem' }}>
+                                            {orderIdx > 0 && <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a', margin: '0.25rem 0' }}><Plus size={12} style={{ display: 'inline', marginRight: '2px' }} /> Pesanan Tambahan</p>}
+                                            <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                              {activeItems.map(item => (
+                                                <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                                                  {item.quantity}x {item.menuItem?.name || 'Item'}
+                                                  <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        );
+                                      })}
+                                      {deletedItems.length > 0 && (
+                                        <div style={{ marginTop: '0.5rem', paddingTop: '0.35rem', borderTop: '1px dashed rgba(239,68,68,0.35)' }}>
+                                          <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', margin: '0.25rem 0' }}><Trash2 size={12} style={{ display: 'inline', marginRight: '2px' }} /> Item Dihapus</p>
+                                          <ul style={{ paddingLeft: '1rem', margin: 0 }}>
+                                            {deletedItems.map(item => (
+                                              <li key={item.id} style={{ marginBottom: '0.25rem', fontSize: '0.85rem', textDecoration: 'line-through', color: '#ef4444' }}>
+                                                {item.quantity}x {item.menuItem?.name || 'Item'}
+                                                <span style={{ float: 'right' }}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </ul>
                             </div>
                             <div className="flex justify-between items-center mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>

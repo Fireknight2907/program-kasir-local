@@ -196,16 +196,20 @@ p { margin-bottom: 1rem; opacity: 0.9; }
   margin-bottom: 2rem;
 }
 
+/* Teks "SCAN UNTUK PESAN" hanya tampil saat struk QR dicetak, disembunyikan di layar */
+.qr-scan-text {
+  display: none;
+}
+
+/* Ukuran struk printer thermal 58mm (lebar tetap, tinggi mengikuti isi/continuous roll) */
 @page {
-  size: auto;
-  margin: 8mm;
+  size: 58mm auto;
+  margin: 0;
 }
 
 @media print {
   html, body {
-    height: 100% !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
+    width: 58mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
@@ -220,43 +224,93 @@ p { margin-bottom: 1rem; opacity: 0.9; }
   }
 
   .print-qr-card {
-    position: fixed !important;
+    position: absolute !important;
+    top: 0 !important;
     left: 50% !important;
-    top: 50% !important;
-    transform: translate(-50%, -50%) !important;
-    width: 90% !important;
-    max-width: 420px !important;
-    border: 2px dashed #000000 !important;
-    border-radius: 16px !important;
+    transform: translateX(-50%) !important;
+    width: 48mm !important;
+    max-width: 48mm !important;
+    border: none !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
     background: #ffffff !important;
     color: #000000 !important;
-    padding: 1.25rem 1.5rem !important;
+    padding: 2mm 0 !important;
     margin: 0 !important;
     box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    page-break-after: avoid !important;
-    break-after: avoid !important;
-    page-break-before: avoid !important;
-    break-before: avoid !important;
+  }
+
+  .print-qr-card * {
+    max-width: 100% !important;
+    color: #000000 !important;
+    box-shadow: none !important;
   }
 
   .no-print {
     display: none !important;
   }
 
-  .qr-time-info {
-    background: #f8fafc !important;
-    border: 1px dashed #000000 !important;
+  /* 1. Nomor meja — teks hitam tebal + border (bukan background solid),
+     supaya tetap tercetak jelas walau opsi "Print backgrounds" browser mati */
+  .qr-badge {
+    background: transparent !important;
     color: #000000 !important;
-    padding: 0.5rem 0.75rem !important;
-    margin-top: 0.5rem !important;
-    margin-bottom: 0.5rem !important;
+    border: 2.5px solid #000000 !important;
+    padding: 2mm 6mm !important;
+    border-radius: 3mm !important;
+    font-size: 22pt !important;
+    font-weight: 900 !important;
+    letter-spacing: 1px !important;
+    margin-bottom: 2.5mm !important;
+  }
+
+  /* 2. QR Code */
+  .qr-container {
+    background: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 1mm 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+  }
+
+  .qr-container svg {
+    width: 40mm !important;
+    height: 40mm !important;
+  }
+
+  /* 3. Ajakan scan */
+  .qr-scan-text {
+    display: block !important;
+    font-size: 11pt !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px !important;
+    margin: 2mm 0 !important;
+  }
+
+  /* 4. Tanggal & jam QR dibuat */
+  .qr-time-info {
+    background: #ffffff !important;
+    border: 1px dashed #000000 !important;
+    border-radius: 0 !important;
+    color: #000000 !important;
+    padding: 1.5mm 2mm !important;
+    margin: 1mm 0 0 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .qr-time-info * {
     color: #000000 !important;
+    font-size: 9pt !important;
+    font-weight: 700 !important;
   }
 }
 
