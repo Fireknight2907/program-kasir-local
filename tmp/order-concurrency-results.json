@@ -1,0 +1,1092 @@
+{
+  "date": "2026-09-22T06:39:38.206Z",
+  "routeSha256": "4cc8318e7a7c6f888a48421e22589e9366cb64c1965060d96d9ca9739e592075",
+  "scope": "Actual route handler and PostgreSQL through local HTTP harness; not full Next.js/browser/production",
+  "results": [
+    {
+      "name": "warmup",
+      "mode": "natural concurrent HTTP",
+      "count": 1,
+      "dispatchSpreadMs": 0,
+      "durationMs": 119.09,
+      "statuses": [
+        200
+      ],
+      "codes": [
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 1,
+        "total": 1000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "different-tables",
+      "mode": "natural concurrent HTTP",
+      "count": 10,
+      "dispatchSpreadMs": 3.31,
+      "durationMs": 224.53,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 10,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 10
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "same-table-within-limits",
+      "mode": "natural concurrent HTTP",
+      "count": 5,
+      "dispatchSpreadMs": 1.79,
+      "durationMs": 99.76,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "session-limit",
+      "mode": "natural concurrent HTTP",
+      "count": 5,
+      "dispatchSpreadMs": 1.34,
+      "durationMs": 61.52,
+      "statuses": [
+        200,
+        409,
+        409,
+        409,
+        409
+      ],
+      "codes": [
+        null,
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT"
+      ],
+      "before": {
+        "orders": 1,
+        "portions": 90,
+        "total": 90000,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 2,
+        "portions": 100,
+        "total": 100000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "rate-limit",
+      "mode": "natural concurrent HTTP",
+      "count": 10,
+      "dispatchSpreadMs": 1.83,
+      "durationMs": 111.32,
+      "statuses": [
+        200,
+        200,
+        200,
+        429,
+        200,
+        200,
+        429,
+        429,
+        429,
+        429
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        "RATE_LIMIT",
+        null,
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT"
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 5,
+        "total": 5000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "duplicate-request",
+      "mode": "natural concurrent HTTP",
+      "count": 6,
+      "dispatchSpreadMs": 0.83,
+      "durationMs": 37.71,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true,
+      "retryStatus": 200,
+      "afterRetry": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      }
+    },
+    {
+      "name": "same-table-within-limits",
+      "mode": "natural concurrent HTTP",
+      "count": 5,
+      "dispatchSpreadMs": 0.62,
+      "durationMs": 70.07,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "session-limit",
+      "mode": "natural concurrent HTTP",
+      "count": 5,
+      "dispatchSpreadMs": 0.65,
+      "durationMs": 31.39,
+      "statuses": [
+        409,
+        200,
+        409,
+        409,
+        409
+      ],
+      "codes": [
+        "SESSION_LIMIT",
+        null,
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT"
+      ],
+      "before": {
+        "orders": 1,
+        "portions": 90,
+        "total": 90000,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 2,
+        "portions": 100,
+        "total": 100000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "rate-limit",
+      "mode": "natural concurrent HTTP",
+      "count": 10,
+      "dispatchSpreadMs": 0.91,
+      "durationMs": 54.54,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        429,
+        429,
+        200,
+        429,
+        429,
+        429
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT"
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 5,
+        "total": 5000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "duplicate-request",
+      "mode": "natural concurrent HTTP",
+      "count": 6,
+      "dispatchSpreadMs": 1.04,
+      "durationMs": 24.9,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true,
+      "retryStatus": 200,
+      "afterRetry": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      }
+    },
+    {
+      "name": "same-table-within-limits",
+      "mode": "natural concurrent HTTP",
+      "count": 5,
+      "dispatchSpreadMs": 0.6,
+      "durationMs": 57.07,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "session-limit",
+      "mode": "natural concurrent HTTP",
+      "count": 5,
+      "dispatchSpreadMs": 0.76,
+      "durationMs": 34.79,
+      "statuses": [
+        200,
+        409,
+        409,
+        409,
+        409
+      ],
+      "codes": [
+        null,
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT"
+      ],
+      "before": {
+        "orders": 1,
+        "portions": 90,
+        "total": 90000,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 2,
+        "portions": 100,
+        "total": 100000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "rate-limit",
+      "mode": "natural concurrent HTTP",
+      "count": 10,
+      "dispatchSpreadMs": 0.88,
+      "durationMs": 59.86,
+      "statuses": [
+        200,
+        200,
+        200,
+        429,
+        200,
+        200,
+        429,
+        429,
+        429,
+        429
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        "RATE_LIMIT",
+        null,
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT"
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 5,
+        "total": 5000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "duplicate-request",
+      "mode": "natural concurrent HTTP",
+      "count": 6,
+      "dispatchSpreadMs": 0.78,
+      "durationMs": 20.97,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true,
+      "retryStatus": 200,
+      "afterRetry": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      }
+    },
+    {
+      "name": "same-table-within-limits",
+      "mode": "pre-write barrier after real reads",
+      "count": 5,
+      "dispatchSpreadMs": 0.59,
+      "durationMs": 44.26,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "session-limit",
+      "mode": "pre-write barrier after real reads",
+      "count": 5,
+      "dispatchSpreadMs": 0.57,
+      "durationMs": 27.55,
+      "statuses": [
+        200,
+        409,
+        409,
+        409,
+        409
+      ],
+      "codes": [
+        null,
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT"
+      ],
+      "before": {
+        "orders": 1,
+        "portions": 90,
+        "total": 90000,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 2,
+        "portions": 100,
+        "total": 100000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "rate-limit",
+      "mode": "pre-write barrier after real reads",
+      "count": 10,
+      "dispatchSpreadMs": 1.09,
+      "durationMs": 62.5,
+      "statuses": [
+        200,
+        200,
+        429,
+        200,
+        429,
+        200,
+        429,
+        200,
+        429,
+        429
+      ],
+      "codes": [
+        null,
+        null,
+        "RATE_LIMIT",
+        null,
+        "RATE_LIMIT",
+        null,
+        "RATE_LIMIT",
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT"
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 5,
+        "total": 5000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "duplicate-request",
+      "mode": "pre-write barrier after real reads",
+      "count": 6,
+      "dispatchSpreadMs": 0.57,
+      "durationMs": 22.58,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true,
+      "retryStatus": 200,
+      "afterRetry": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      }
+    },
+    {
+      "name": "same-table-within-limits",
+      "mode": "pre-write barrier after real reads",
+      "count": 5,
+      "dispatchSpreadMs": 0.55,
+      "durationMs": 41.64,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "session-limit",
+      "mode": "pre-write barrier after real reads",
+      "count": 5,
+      "dispatchSpreadMs": 0.79,
+      "durationMs": 28.57,
+      "statuses": [
+        409,
+        409,
+        200,
+        409,
+        409
+      ],
+      "codes": [
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        null,
+        "SESSION_LIMIT",
+        "SESSION_LIMIT"
+      ],
+      "before": {
+        "orders": 1,
+        "portions": 90,
+        "total": 90000,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 2,
+        "portions": 100,
+        "total": 100000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "rate-limit",
+      "mode": "pre-write barrier after real reads",
+      "count": 10,
+      "dispatchSpreadMs": 0.96,
+      "durationMs": 54.16,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        429,
+        429,
+        429,
+        429,
+        429
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        "RATE_LIMIT"
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 5,
+        "total": 5000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "duplicate-request",
+      "mode": "pre-write barrier after real reads",
+      "count": 6,
+      "dispatchSpreadMs": 0.62,
+      "durationMs": 21.71,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true,
+      "retryStatus": 200,
+      "afterRetry": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      }
+    },
+    {
+      "name": "same-table-within-limits",
+      "mode": "pre-write barrier after real reads",
+      "count": 5,
+      "dispatchSpreadMs": 0.49,
+      "durationMs": 38.22,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 10,
+        "total": 10000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "session-limit",
+      "mode": "pre-write barrier after real reads",
+      "count": 5,
+      "dispatchSpreadMs": 0.47,
+      "durationMs": 24.64,
+      "statuses": [
+        200,
+        409,
+        409,
+        409,
+        409
+      ],
+      "codes": [
+        null,
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT",
+        "SESSION_LIMIT"
+      ],
+      "before": {
+        "orders": 1,
+        "portions": 90,
+        "total": 90000,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 2,
+        "portions": 100,
+        "total": 100000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "rate-limit",
+      "mode": "pre-write barrier after real reads",
+      "count": 10,
+      "dispatchSpreadMs": 0.72,
+      "durationMs": 56.52,
+      "statuses": [
+        429,
+        429,
+        200,
+        200,
+        429,
+        200,
+        200,
+        200,
+        429,
+        429
+      ],
+      "codes": [
+        "RATE_LIMIT",
+        "RATE_LIMIT",
+        null,
+        null,
+        "RATE_LIMIT",
+        null,
+        null,
+        null,
+        "RATE_LIMIT",
+        "RATE_LIMIT"
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 5,
+        "portions": 5,
+        "total": 5000,
+        "totalsConsistent": true,
+        "receipts": 5
+      },
+      "databaseErrorCodes": [],
+      "pass": true
+    },
+    {
+      "name": "duplicate-request",
+      "mode": "pre-write barrier after real reads",
+      "count": 6,
+      "dispatchSpreadMs": 0.63,
+      "durationMs": 19.53,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "codes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "before": {
+        "orders": 0,
+        "portions": 0,
+        "total": 0,
+        "totalsConsistent": true,
+        "receipts": 0
+      },
+      "after": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      },
+      "databaseErrorCodes": [],
+      "pass": true,
+      "retryStatus": 200,
+      "afterRetry": {
+        "orders": 1,
+        "portions": 2,
+        "total": 2000,
+        "totalsConsistent": true,
+        "receipts": 1
+      }
+    }
+  ],
+  "remainingFixtures": 0
+}

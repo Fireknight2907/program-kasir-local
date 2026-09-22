@@ -30,6 +30,8 @@ export default function OrderPage({ params }) {
   const [showExistingOrders, setShowExistingOrders] = useState(false);
 
   const [categoriesList, setCategoriesList] = useState([]);
+  const [rateLimitedUntil, setRateLimitedUntil] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const categoryRefs = useRef({});
 
@@ -116,8 +118,38 @@ export default function OrderPage({ params }) {
     return () => { stopped = true; clearInterval(timer); };
   }, [transactionId]);
 
+  // Live countdown for the "5 kiriman/menit" rate limit — ticks every second from the
+  // retryAfterMs the server returns (based on when the oldest recent submission ages out).
+  // setState calls happen inside the interval callback (deferred), never synchronously in the
+  // effect body, so this doesn't trigger cascading renders.
+  useEffect(() => {
+    if (!rateLimitedUntil) return;
+    const timer = setInterval(() => {
+      const current = Date.now();
+      if (current >= rateLimitedUntil) setRateLimitedUntil(null);
+      else setNow(current);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [rateLimitedUntil]);
+  const rateLimitSecondsLeft = rateLimitedUntil ? Math.max(0, Math.ceil((rateLimitedUntil - now) / 1000)) : 0;
+
+  const getAggregatedTotalItemCount = () => {
+    if (!transaction?.orders || !Array.isArray(transaction.orders)) return 0;
+    return transaction.orders.reduce((sum, order) => sum + (order.items || []).reduce((s, item) => s + (Number(item.quantity) || 0), 0), 0);
+  };
+  const sessionLimitReached = getAggregatedTotalItemCount() >= ORDER_LIMITS.perSession;
+
+  const formatCountdown = (seconds) => {
+    if (seconds >= 60) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return s > 0 ? `${m} menit ${s} detik` : `${m} menit`;
+    }
+    return `${seconds} detik`;
+  };
+
   const updateCart = (item, delta) => {
-    if (submittingRef.current || pendingRef.current) return;
+    if (submittingRef.current || pendingRef.current || sessionLimitReached) return;
     setCart(prev => {
       const currentQty = prev[item.id]?.quantity || 0;
       const newQty = Math.max(0, Math.min(ORDER_LIMITS.perMenu, currentQty + delta));
@@ -241,7 +273,12 @@ export default function OrderPage({ params }) {
         localStorage.removeItem(storageKey);
         pendingRef.current = null;
         setPendingOrder(null);
-        setSubmitMessage(response?.error || 'Pesanan ditolak. Periksa pesanan Anda.');
+        if (response?.code === 'RATE_LIMIT') {
+          const retryMs = Number(response.retryAfterMs) > 0 ? Number(response.retryAfterMs) : 60000;
+          setRateLimitedUntil(Date.now() + retryMs);
+        } else {
+          setSubmitMessage(response?.error || 'Pesanan ditolak. Periksa pesanan Anda.');
+        }
         if (response?.code === 'SESSION_CLOSED') setError(response?.error);
       }
     } catch (err) {
@@ -430,17 +467,26 @@ export default function OrderPage({ params }) {
             </p>
           </div>
           
-          <button 
-            className="btn btn-outline" 
-            style={{ padding: '0.75rem 1.75rem', fontWeight: 700, borderRadius: '14px', width: '100%', fontSize: '0.95rem' }}
+          {sessionLimitReached && ['open', 'ordered'].includes(transaction?.status) && (
+            <div style={{ marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.08)', padding: '0.85rem 1rem', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+              <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: '#b91c1c' }}>
+                Pesanan sudah melewati {ORDER_LIMITS.perSession} porsi. Panggil karyawan jika ingin menambah pesanan.
+              </p>
+            </div>
+          )}
+
+          <button
+            className="btn btn-outline"
+            disabled={sessionLimitReached}
+            style={{ padding: '0.75rem 1.75rem', fontWeight: 700, borderRadius: '14px', width: '100%', fontSize: '0.95rem', opacity: sessionLimitReached ? 0.6 : 1 }}
             onClick={() => {
-              if (!['open', 'ordered'].includes(transaction?.status)) return;
+              if (!['open', 'ordered'].includes(transaction?.status) || sessionLimitReached) return;
               setOrdered(false);
               setCart({});
             }}
           >
             <Plus size={18} style={{ display: 'inline', marginRight: '8px' }} />
-            {['open', 'ordered'].includes(transaction?.status) ? 'Pesan Menu Tambahan' : 'Sesi sudah ditutup'}
+            {!['open', 'ordered'].includes(transaction?.status) ? 'Sesi sudah ditutup' : sessionLimitReached ? `Batas ${ORDER_LIMITS.perSession} Porsi Tercapai` : 'Pesan Menu Tambahan'}
           </button>
         </div>
       </div>
@@ -470,8 +516,16 @@ export default function OrderPage({ params }) {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)' }}>
       {(connectionError || !['open', 'ordered'].includes(transaction?.status)) && <p role="alert" style={{padding:16,background:'#fef3c7',color:'#92400e'}}>{!['open', 'ordered'].includes(transaction?.status) ? 'Sesi sudah ditutup. Minta QR baru kepada kasir untuk memesan kembali.' : connectionError}</p>}
 
-      <p role="status" style={{ padding: '0.75rem', textAlign: 'center' }}>Maksimal {ORDER_LIMITS.perMenu} porsi per menu, {ORDER_LIMITS.perSubmission} porsi per kiriman, dan {ORDER_LIMITS.perSession} porsi per sesi. Pesanan lebih besar: hubungi kasir.</p>
-      {submitMessage && <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c' }}>{submitMessage}</p>}
+      {sessionLimitReached && (
+        <p role="alert" style={{ padding: 16, background: '#fee2e2', color: '#991b1b', fontWeight: 700, textAlign: 'center' }}>
+          Pesanan sudah melewati {ORDER_LIMITS.perSession} porsi. Panggil karyawan jika ingin menambah pesanan.
+        </p>
+      )}
+
+      <p role="status" style={{ padding: '0.75rem', textAlign: 'center' }}>Maksimal {ORDER_LIMITS.perMenu} porsi per menu, {ORDER_LIMITS.perSubmission} porsi per kiriman, {ORDER_LIMITS.perSession} porsi per sesi, dan {ORDER_LIMITS.perMinute} kiriman per menit. Pesanan lebih besar: hubungi kasir.</p>
+      {rateLimitSecondsLeft > 0
+        ? <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c', fontWeight: 700 }}>Terlalu banyak pengiriman. Coba lagi setelah {formatCountdown(rateLimitSecondsLeft)}.</p>
+        : submitMessage && <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c' }}>{submitMessage}</p>}
       {/* Top Header Bar */}
       <div style={{
         position: 'sticky',
@@ -871,7 +925,7 @@ export default function OrderPage({ params }) {
           {/* Submit Button */}
           <button
             onClick={() => setShowCartModal(true)}
-            disabled={submitting}
+            disabled={submitting || sessionLimitReached}
             style={{
               background: '#ef4444',
               color: 'white',
@@ -881,10 +935,11 @@ export default function OrderPage({ params }) {
               fontWeight: 800,
               fontSize: '0.9rem',
               cursor: 'pointer',
+              opacity: sessionLimitReached ? 0.6 : 1,
               boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)'
             }}
           >
-            {submitting ? 'Loading...' : 'Confirm Order'}
+            {submitting ? 'Loading...' : sessionLimitReached ? 'Batas Tercapai' : 'Confirm Order'}
           </button>
         </div>
       )}
@@ -1023,10 +1078,10 @@ export default function OrderPage({ params }) {
               <button
                 className="btn btn-primary"
                 onClick={submitOrder}
-                disabled={submitting}
-                style={{ width: '100%', padding: '0.85rem', borderRadius: '16px', fontWeight: 800, background: '#ef4444', borderColor: '#ef4444' }}
+                disabled={submitting || sessionLimitReached || rateLimitSecondsLeft > 0}
+                style={{ width: '100%', padding: '0.85rem', borderRadius: '16px', fontWeight: 800, background: '#ef4444', borderColor: '#ef4444', opacity: (sessionLimitReached || rateLimitSecondsLeft > 0) ? 0.6 : 1 }}
               >
-                {submitting ? 'Mengirim...' : 'Kirim Pesanan Sekarang'}
+                {submitting ? 'Mengirim...' : rateLimitSecondsLeft > 0 ? `Tunggu ${formatCountdown(rateLimitSecondsLeft)}` : sessionLimitReached ? `Batas ${ORDER_LIMITS.perSession} Porsi Tercapai` : 'Kirim Pesanan Sekarang'}
               </button>
             </div>
           </div>

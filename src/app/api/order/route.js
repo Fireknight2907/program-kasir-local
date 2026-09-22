@@ -6,11 +6,25 @@ import { ORDER_LIMITS } from '@/lib/order-limits';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+// Thrown inside the locked transaction below so the outer catch can turn a rejected
+// limit check into the right HTTP status instead of the generic 500 fallback.
+class OrderRejected extends Error {
+  constructor(code, message, status, extra) {
+    super(message);
+    this.code = code;
+    this.status = status;
+    this.extra = extra;
+  }
+}
+
 export async function POST(request) {
+  // Hoisted so the outer catch can recover a raced duplicate requestId (see P2002 handling below).
+  let transactionId, requestId;
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Pesanan tidak valid.' }, { status: 400 });
-    const { transactionId, requestId, items, isTakeaway = false } = body;
+    ({ transactionId, requestId } = body);
+    const { items, isTakeaway = false } = body;
     if (typeof transactionId !== 'string' || !transactionId.trim() || transactionId.length > 200 ||
         typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId) ||
         !Array.isArray(items) || !items.length || items.length > ORDER_LIMITS.perSubmission ||
@@ -40,25 +54,18 @@ export async function POST(request) {
       return NextResponse.json(previous.response);
     }
 
-    // 2. Parallel pre-flight read queries (Fast, no connection locks held)
-    const [session, recentSubmissionsCount, currentItemAgg, submittedAgg, menuItems] = await Promise.all([
+    // 2. Parallel pre-flight read queries (Fast, no connection locks held).
+    // Rate-limit / session-limit counts are NOT read here: reading them outside a lock let
+    // concurrent submissions all pass the check before any of them wrote (proven by repeated
+    // load testing on 2026-09-22 — both limits could be bypassed by simultaneous requests).
+    // They are re-read and enforced inside the locked transaction below instead.
+    const [session, menuItems] = await Promise.all([
       prisma.transaction.findUnique({ where: { id: transactionId } }),
-      prisma.orderSubmission.count({ where: { transactionId, createdAt: { gte: new Date(Date.now() - 60000) } } }),
-      prisma.orderItem.aggregate({ where: { order: { transactionId } }, _sum: { quantity: true } }),
-      prisma.orderSubmission.aggregate({ where: { transactionId }, _sum: { quantity: true } }),
       prisma.menuItem.findMany({ where: { id: { in: normalized.map(item => item.menuItemId) } }, select: { id: true, price: true, isAvailable: true } }),
     ]);
 
     if (!session || !['open', 'ordered'].includes(session.status) || session.completedAt) {
       return NextResponse.json({ code: 'SESSION_CLOSED', error: 'Sesi meja sudah ditutup atau tidak berlaku. Silakan minta QR Code baru kepada kasir.' }, { status: 409 });
-    }
-
-    if (recentSubmissionsCount >= ORDER_LIMITS.perMinute) {
-      return NextResponse.json({ code: 'RATE_LIMIT', error: 'Terlalu banyak pengiriman. Tunggu satu menit sebelum memesan lagi.' }, { status: 429 });
-    }
-
-    if (Math.max(currentItemAgg._sum.quantity || 0, submittedAgg._sum.quantity || 0) + quantity > ORDER_LIMITS.perSession) {
-      return NextResponse.json({ code: 'SESSION_LIMIT', error: 'Batas pemesanan mandiri sesi ini adalah 100 porsi. Silakan hubungi kasir.' }, { status: 409 });
     }
 
     const menuById = new Map(menuItems.map(item => [item.id, item]));
@@ -74,9 +81,34 @@ export async function POST(request) {
 
     // 3. Lean & lightning-fast write transaction (< 50ms, minimal pooler stress)
     const result = await prisma.$transaction(async tx => {
+      // Serialize every submission for this table/session so the checks below can't be
+      // raced by concurrent requests (repeated QR scans, double-tab retries, etc). This also
+      // fixes the duplicate-requestId race: a losing request now waits here instead of hitting
+      // a raw unique-constraint error, then finds the winner's row via doubleCheck below.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'order-session:' + transactionId}))`;
+
       // Re-check idempotency under lock in case of simultaneous duplicate submits
       const doubleCheck = await tx.orderSubmission.findUnique({ where: { transactionId_requestId: { transactionId, requestId } } });
       if (doubleCheck) return doubleCheck.response;
+
+      const now = Date.now();
+      const recentSubmissions = await tx.orderSubmission.findMany({
+        where: { transactionId, createdAt: { gte: new Date(now - 60000) } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true }
+      });
+      if (recentSubmissions.length >= ORDER_LIMITS.perMinute) {
+        const retryAfterMs = Math.max(0, recentSubmissions[0].createdAt.getTime() + 60000 - now);
+        throw new OrderRejected('RATE_LIMIT', 'Terlalu banyak pengiriman. Coba lagi setelah beberapa saat.', 429, { retryAfterMs });
+      }
+
+      const [currentItemAgg, submittedAgg] = await Promise.all([
+        tx.orderItem.aggregate({ where: { order: { transactionId } }, _sum: { quantity: true } }),
+        tx.orderSubmission.aggregate({ where: { transactionId }, _sum: { quantity: true } }),
+      ]);
+      if (Math.max(currentItemAgg._sum.quantity || 0, submittedAgg._sum.quantity || 0) + quantity > ORDER_LIMITS.perSession) {
+        throw new OrderRejected('SESSION_LIMIT', `Pesanan sudah melewati ${ORDER_LIMITS.perSession} porsi. Panggil karyawan jika ingin menambah pesanan.`, 409);
+      }
 
       const order = await tx.order.create({
         data: { transactionId, total, isTakeaway, kitchenStatus: 'queued', items: { create: data } }
@@ -97,9 +129,19 @@ export async function POST(request) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof OrderRejected) {
+      return NextResponse.json({ code: error.code, error: error.message, ...error.extra }, { status: error.status });
+    }
+    // Defensive: even with the advisory lock above, if two submissions with the same requestId
+    // still raced (e.g. lock unavailable), the loser gets a unique-constraint error here.
+    // Recover the winner's saved response instead of reporting a false failure to the client.
+    if (error?.code === 'P2002' && transactionId && requestId) {
+      const existing = await prisma.orderSubmission.findUnique({ where: { transactionId_requestId: { transactionId, requestId } } }).catch(() => null);
+      if (existing) return NextResponse.json(existing.response);
+    }
     console.error('Order route error:', error);
-    return NextResponse.json({ 
-      error: 'Status pengiriman belum dapat dipastikan. Coba kembali dengan pengiriman yang sama. (' + (error?.message || 'Server timeout') + ')' 
+    return NextResponse.json({
+      error: 'Status pengiriman belum dapat dipastikan. Coba kembali dengan pengiriman yang sama. (' + (error?.message || 'Server timeout') + ')'
     }, { status: 500 });
   }
 }
