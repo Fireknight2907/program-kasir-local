@@ -91,6 +91,22 @@ export async function POST(request) {
       const doubleCheck = await tx.orderSubmission.findUnique({ where: { transactionId_requestId: { transactionId, requestId } } });
       if (doubleCheck) return doubleCheck.response;
 
+      // Row-lock the transaction (a real Postgres row lock via UPDATE, not just the advisory
+      // lock above) and re-read its status. The advisory lock only serializes this route against
+      // itself — it does nothing against PUT /api/transaction/[id] (payment/cancel), which takes
+      // its own row lock the same way before closing the session. Without this, a request that
+      // passed the pre-flight status check above (line ~67) but is written here *after* a
+      // concurrent payment completes would still create the order and force status back to
+      // 'ordered' via the unconditional update below, silently reopening a paid transaction.
+      await tx.transaction.updateMany({ where: { id: transactionId }, data: { total: { increment: 0 } } });
+      const current = await tx.transaction.findUnique({ where: { id: transactionId } });
+      if (!current || !['open', 'ordered'].includes(current.status) || current.completedAt) {
+        throw new OrderRejected('SESSION_CLOSED', 'Sesi meja sudah ditutup atau tidak berlaku. Silakan minta QR Code baru kepada kasir.', 409);
+      }
+      if (total + current.total > 2147483647) {
+        throw new OrderRejected('INVALID_TOTAL', 'Total pesanan tidak valid. Silakan hubungi kasir.', 400);
+      }
+
       const now = Date.now();
       const recentSubmissions = await tx.orderSubmission.findMany({
         where: { transactionId, createdAt: { gte: new Date(now - 60000) } },

@@ -13,6 +13,25 @@ import ForcePasswordChange from '@/components/ForcePasswordChange';
 import KitchenPanel from '@/components/KitchenPanel';
 import { newOrderRequestId } from '@/lib/order-request';
 
+// Struk dapur — dipicu dari dashboard kasir (laptop yang tersambung printer), bukan dari
+// menu Kitchen (tidak dipakai, rencana dihapus sebelum launch). ID pesanan yang sudah
+// dicetak disimpan di localStorage, bukan kolom database baru — lihat alasan di CATATAN_PROYEK
+// (menghindari migrasi schema untuk status yang murni kebutuhan UI, setelah 3x insiden
+// kolom baru belum ter-push ke produksi sebelum dipakai).
+const KITCHEN_PRINTED_KEY = 'kitchen-printed-order-ids';
+function loadKitchenPrintedIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KITCHEN_PRINTED_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch { return new Set(); }
+}
+function saveKitchenPrintedIds(set) {
+  try {
+    const arr = [...set];
+    localStorage.setItem(KITCHEN_PRINTED_KEY, JSON.stringify(arr.length > 2000 ? arr.slice(arr.length - 2000) : arr));
+  } catch { /* localStorage tidak tersedia — cetak tetap jalan, mungkin terulang setelah reload */ }
+}
+
 export default function CashierDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState(null);
@@ -20,6 +39,18 @@ export default function CashierDashboard() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'menu'
+
+  // Struk dapur — pesanan baru (belum pernah tercetak di laptop ini) menunggu window.print().
+  const [kitchenReceiptsToPrint, setKitchenReceiptsToPrint] = useState([]);
+  const kitchenPrintedIdsRef = useRef(null);
+  if (kitchenPrintedIdsRef.current === null) kitchenPrintedIdsRef.current = loadKitchenPrintedIds();
+  const kitchenPrintFetchingRef = useRef(false);
+  // Struk yang baru saja DICOBA dicetak otomatis lewat polling (bukan lewat klik pengguna).
+  // Chrome kadang diam-diam menolak window.print() kalau tidak dipicu langsung oleh interaksi
+  // pengguna baru-baru ini (lihat catatan di CATATAN_PROYEK) — jadi batch ini tetap disimpan
+  // di sini supaya tombol "Cetak Sekarang" (di semua tab, tidak perlu pindah menu) selalu ada
+  // sebagai jaring pengaman kalau popup otomatisnya sempat tidak muncul.
+  const [kitchenRecentPrints, setKitchenRecentPrints] = useState([]);
 
   // Transactions state
   const [transactions, setTransactions] = useState([]);
@@ -194,6 +225,23 @@ export default function CashierDashboard() {
     }
     transactionFetchRef.current = false;
     setLoadingTransactions(false);
+  };
+
+  // Struk dapur — cek pesanan baru yang belum pernah dicetak di laptop ini, lalu antre untuk
+  // dicetak (lihat efek window.print() di bawah). Dipanggil dari polling yang sama dengan
+  // fetchTransactions supaya jalan terus selama dashboard ini terbuka, apa pun tab yang aktif.
+  const checkKitchenReceipts = async () => {
+    if (kitchenPrintFetchingRef.current) return;
+    kitchenPrintFetchingRef.current = true;
+    try {
+      const res = await fetch('/api/kitchen', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+      if (res.ok) {
+        const data = await res.json();
+        const unprinted = data.filter(o => o.kitchenStatus !== 'cancelled' && o.items.some(i => !i.deletedAt) && !kitchenPrintedIdsRef.current.has(o.id));
+        if (unprinted.length) setKitchenReceiptsToPrint(unprinted);
+      }
+    } catch { /* Cetak struk bersifat best-effort; kegagalan di sini tidak perlu ditampilkan — polling transaksi utama sudah menunjukkan status koneksi. */ }
+    kitchenPrintFetchingRef.current = false;
   };
 
   // Fetch archive transactions
@@ -884,12 +932,76 @@ export default function CashierDashboard() {
       fetchTransactions();
       fetchMenu();
       fetchCategories();
+      checkKitchenReceipts();
       const interval = setInterval(() => {
         fetchTransactions();
+        checkKitchenReceipts();
       }, 5000);
       return () => clearInterval(interval);
     }
   }, [checkingAuth, currentUser, activeTab]);
+
+  // Struk dapur: begitu kitchenReceiptsToPrint terisi, markup .kitchen-receipt-print-area
+  // sudah ter-render ke DOM (efek jalan setelah commit), baru window.print() dipanggil. Kalau
+  // ada >1 pesanan baru dalam satu siklus polling, semuanya masuk 1 print job (halaman
+  // terpisah per pesanan lewat CSS page-break) — cukup sekali klik "Print" di dialog browser.
+  // Ditunda selama kartu .print-qr-card BENAR-BENAR ada di DOM — bukan cuma selama state
+  // activeQr tidak null. Kartu QR (page.js ~1674) cuma dirender saat activeTab==='transactions',
+  // jadi harus dicek DUA-DUANYA: kalau cuma cek activeQr saja, begitu kasir buka QR sekali lalu
+  // pindah tab TANPA klik "Tutup", activeQr tetap tersimpan di state selamanya walau kartunya
+  // sudah lama tidak ada di layar — print struk dapur jadi macet total sampai halaman di-refresh
+  // (refresh mereset semua state React termasuk activeQr). Ini penyebab bug "kadang popup print
+  // tidak muncul, harus refresh dulu" yang dilaporkan pengguna.
+  const qrCardMounted = Boolean(activeQr) && activeTab === 'transactions';
+
+  // Banner "Cetak Sekarang" HARUS tetap muncul begitu ada struk baru terdeteksi, apa pun
+  // status qrCardMounted — efek TERPISAH dari efek window.print() di bawah supaya penundaan
+  // cetak (saat kartu QR meja sedang terbuka, lihat efek berikutnya) tidak ikut menunda
+  // notifikasinya juga. Sebelumnya keduanya digabung dalam satu efek yang `return` lebih awal
+  // saat qrCardMounted — akibatnya kalau kartu QR meja kebetulan sedang terbuka saat pesanan
+  // baru masuk, TIDAK ADA notifikasi sama sekali (bukan cuma window.print() yang tertunda)
+  // sampai kartu QR ditutup. Ini penyebab bug "banner tidak muncul lagi setelah pesan lagi"
+  // yang dilaporkan pengguna (kartu QR meja sedang terbuka saat itu).
+  useEffect(() => {
+    if (!kitchenReceiptsToPrint.length) return;
+    const batch = kitchenReceiptsToPrint;
+    const sync = setTimeout(() => {
+      setKitchenRecentPrints(prev => {
+        const seen = new Set();
+        return [...batch, ...prev].filter(o => (seen.has(o.id) ? false : (seen.add(o.id), true))).slice(0, 10);
+      });
+    }, 0);
+    return () => clearTimeout(sync);
+  }, [kitchenReceiptsToPrint]);
+
+  useEffect(() => {
+    if (!kitchenReceiptsToPrint.length || qrCardMounted) return;
+    window.print();
+    kitchenReceiptsToPrint.forEach(o => kitchenPrintedIdsRef.current.add(o.id));
+    saveKitchenPrintedIds(kitchenPrintedIdsRef.current);
+    // Kosongkan lagi setelah tercetak supaya print manual (mis. Ctrl+P untuk cetak QR meja)
+    // berikutnya tidak ikut mencetak ulang batch struk dapur ini. Banner (kitchenRecentPrints)
+    // sudah diurus efek terpisah di atas, jadi di sini cukup fokus ke percobaan window.print()
+    // dan membersihkan antrean cetaknya sendiri.
+    const clear = setTimeout(() => setKitchenReceiptsToPrint([]), 0);
+    return () => clearTimeout(clear);
+  }, [kitchenReceiptsToPrint, qrCardMounted]);
+
+  // Dipanggil dari klik tombol "Cetak Sekarang" (lihat tombol mengambang di root JSX) — ini
+  // interaksi pengguna sungguhan, jadi window.print() dijamin tidak ditolak diam-diam oleh
+  // Chrome seperti yang bisa terjadi pada percobaan otomatis dari polling. Kalau kartu QR meja
+  // masih terbuka saat tombol ini diklik, efek di atas tetap tidak akan memanggil window.print()
+  // (supaya struk dapur tidak tercetak tumpang tindih dengan QR) — beri tahu staf secara
+  // eksplisit di sini alih-alih diam-diam tidak melakukan apa pun.
+  const reprintKitchenReceipts = () => {
+    if (!kitchenRecentPrints.length) return;
+    if (qrCardMounted) {
+      alert('Tutup dulu kartu QR Code meja yang sedang terbuka sebelum mencetak struk dapur, supaya tidak tercetak tumpang tindih.');
+      return;
+    }
+    setKitchenReceiptsToPrint(kitchenRecentPrints);
+    setKitchenRecentPrints([]);
+  };
 
   useEffect(() => {
     if (activeTab === 'archive' && currentUser?.role === 'ADMIN') {
@@ -4168,6 +4280,79 @@ export default function CashierDashboard() {
           </div>
         </div>
       )}
+
+      {/* Jaring pengaman struk dapur — selalu tampil di layar (bukan cuma print media), di semua
+          tab, tidak butuh pindah menu/refresh. Muncul kalau ada struk yang baru dicoba dicetak
+          otomatis lewat polling (lihat efek di atas) — karena window.print() yang dipicu timer
+          (bukan klik langsung) bisa diam-diam ditolak Chrome. Klik tombol di sini = klik
+          sungguhan, jadi window.print() dijamin tidak ditolak. */}
+      {kitchenRecentPrints.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          right: '20px',
+          bottom: '20px',
+          zIndex: 2000,
+          background: '#1e293b',
+          color: 'white',
+          borderRadius: '14px',
+          padding: '0.85rem 1rem',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          maxWidth: '340px'
+        }}>
+          <Printer size={20} style={{ flexShrink: 0, color: '#f59e0b' }} />
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem' }}>
+              {kitchenRecentPrints.length} struk dapur menunggu dicetak
+            </p>
+            <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', opacity: 0.75 }}>
+              Klik kalau popup print tidak muncul otomatis
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+            onClick={reprintKitchenReceipts}
+          >
+            Cetak Sekarang
+          </button>
+          <button
+            onClick={() => setKitchenRecentPrints([])}
+            title="Sembunyikan"
+            style={{ background: 'transparent', border: 'none', color: 'white', opacity: 0.6, cursor: 'pointer', padding: 0, display: 'flex' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Struk dapur — tersembunyi total di layar, hanya muncul saat window.print() dipanggil
+          dari efek di atas. Dirender di sini (root, di luar semua tab) supaya tetap jalan
+          apa pun tab yang sedang dibuka di dashboard. Kosongkan isinya (bukan cuma tunda efek
+          print-nya) selama kartu .print-qr-card BENAR-BENAR ada di DOM (qrCardMounted, lihat
+          definisi di atas) — supaya kalau staf mencetak QR secara manual, tidak ada struk
+          kitchen yang masih menunggu ikut tercetak tumpang tindih. */}
+      <div className="kitchen-receipt-print-area">
+        {!qrCardMounted && kitchenReceiptsToPrint.map(order => (
+          <div key={order.id} className="kitchen-receipt">
+            <div className="kitchen-receipt-hanger" />
+            <div className="kitchen-receipt-meta">
+              Pesanan #{order.id} · {new Date(order.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+            </div>
+            <div className="kitchen-receipt-table">{order.transaction?.tableNumber || 'Tanpa meja'}</div>
+            <div className="kitchen-receipt-type">{order.isTakeaway ? 'BUNGKUS' : 'MAKAN DI TEMPAT'}</div>
+            <div className="kitchen-receipt-divider" />
+            {order.items.filter(item => !item.deletedAt).map(item => (
+              <div key={item.id} className="kitchen-receipt-item">
+                <span className="kitchen-receipt-item-qty">{item.quantity}×</span>
+                <span>{item.menuItem.name}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

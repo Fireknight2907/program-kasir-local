@@ -695,3 +695,303 @@ Baca kode `src/app/order/[transactionId]/page.js` (alur render & state customer)
 - Uji manual browser untuk 4 skenario di atas (lihat Pengujian) — ini murni perubahan client, belum ada satu pun yang diverifikasi lewat interaksi nyata karena sesi ini CLI-only.
 - Di luar scope permintaan hari ini tapi relevan untuk didiskusikan ke depan (tidak diubah sengaja): jendela retry `pendingOrder` yang self-healing (lihat "Kenapa desainnya begini" di atas) — kalau pengguna mau perilaku itu diperketat juga (mis. langsung berhenti retry begitu polling mendeteksi sesi tertutup, bukan menunggu 1 siklus retry lagi), perlu didiskusikan dulu karena berisiko membuat pesanan yang sebenarnya sukses jadi tidak pernah dikonfirmasi ke customer.
 - Semua daftar uji manual dari entri-entri sebelumnya hari ini (soal batas 100/30 porsi, rate-limit, requestId tab ganda) masih tertunda juga — belum satupun perubahan customer-order hari ini yang diverifikasi lewat klik nyata di browser.
+
+---
+
+## 2026-09-22 (lanjutan 6) — Claude Sonnet 5
+
+### Tugas
+Implementasi fitur baru: cetak struk otomatis ke printer dapur setiap kali customer mengirim pesanan. Backlog ini sudah disebut berkali-kali di catatan lama (mis. entri 2026-09-16 "Diminta jelaskan fungsi menu Kitchen...") sebagai "belum dikerjakan, perlu klarifikasi jenis printer/kapan dicetak/fallback" — hari ini dikerjakan setelah klarifikasi didapat langsung dari pengguna.
+
+### Klarifikasi yang diminta ke pengguna sebelum mulai (dan jawabannya)
+Kodebase ini **tidak punya infrastruktur cetak sama sekali** sebelum sesi ini (dikonfirmasi ulang lewat pencarian kode: satu-satunya `window.print()` dipakai untuk QR meja, tidak ada library ESC/POS atau print server). Karena pilihan mekanisme cetak sangat mengubah besar-kecilnya implementasi, ditanyakan dulu ke pengguna (bukan diasumsikan):
+1. **Jenis printer** → dijawab: printer thermal tersambung USB/Bluetooth ke device yang membuka halaman Kitchen di browser (bukan printer jaringan/IP). Ini berarti solusi cukup lewat `window.print()` dari browser Kitchen, tidak perlu backend print server/library ESC/POS baru.
+2. **Dialog cetak vs cetak senyap** → dijawab: dialog cetak bawaan browser (staf klik "Print" 1x per struk) **tidak masalah**, tidak perlu cetak senyap tanpa interaksi (yang butuh konfigurasi kiosk-printing di luar kode aplikasi).
+
+### Arsitektur & alur data
+- **Tidak ada endpoint/trigger baru dari sisi customer.** Alur cetak sepenuhnya dipicu dari `src/components/KitchenPanel.js` (halaman Kitchen yang sudah polling `GET /api/kitchen` tiap 5 detik sejak lama) — bukan dari `POST /api/order` (submit customer) atau dari server. Ini penting dipahami: **device yang menjalankan browser Kitchen HARUS tetap terbuka** untuk fitur ini bekerja sama sekali — tidak ada mekanisme push/server-side print, sama seperti keterbatasan yang sudah dicatat berulang kali soal Kitchen Panel butuh layar yang selalu dipantau.
+- Tiap siklus polling, `refresh()` di `KitchenPanel.js` membandingkan daftar order yang baru diambil dengan daftar ID yang sudah pernah dicetak (`printedIdsRef`, di-load dari `localStorage` key `kitchen-printed-order-ids`). Order yang: (a) belum pernah tercetak, (b) `kitchenStatus !== 'cancelled'`, dan (c) masih punya minimal 1 item aktif (`!item.deletedAt`) → dikumpulkan ke state `receiptsToPrint`.
+- Sebuah `useEffect` terpisah bereaksi saat `receiptsToPrint` terisi: memanggil `window.print()` (markup struk sudah ter-render ke DOM tersembunyi lewat CSS sebelum efek ini jalan, karena effect jalan setelah commit), lalu menandai ID-ID itu sebagai "sudah dicetak" (`printedIdsRef` + disimpan lagi ke `localStorage`).
+- **Granularitas cetak = 1 `Order` row = 1 struk.** Ini otomatis memenuhi requirement "sekali pesan 1 struk, 2x kiriman di meja sama = 2 struk terpisah" — karena setiap `POST /api/order` yang sukses SELALU membuat 1 baris `Order` baru (lihat `src/app/api/order/route.js`, tidak pernah menggabung ke `Order` lama), jadi tidak perlu logika pengelompokan tambahan sama sekali — sumber data yang sudah ada (`GET /api/kitchen`, dipakai juga untuk tampilan layar Kitchen yang sudah ada) sudah persis berbentuk "per pesanan/per kiriman".
+- Kalau >1 order baru muncul dalam 1 siklus polling yang sama (mis. 2 customer submit hampir bersamaan), semuanya masuk ke SATU `window.print()` job dengan struk terpisah per halaman (CSS `page-break-after: always` di `.kitchen-receipt`, lihat `globals.css`) — staf tetap cukup klik "Print" sekali untuk dapat beberapa struk fisik terpisah, sesuai instruksi cetak per printer thermal continuous-roll.
+
+### Perubahan kode
+- `src/app/globals.css` — tambah blok CSS baru setelah blok print QR yang sudah ada (tidak menyentuh style QR sama sekali):
+  - `.kitchen-receipt-print-area` — `display:none` di layar (tidak pernah muncul dalam tampilan normal Kitchen Panel), `display:block` + exemption dari aturan `body * {visibility:hidden}` (aturan global yang sudah ada untuk print QR, di-reuse) hanya saat `@media print`.
+  - `.kitchen-receipt` — satu struk, lebar 48mm (dalam kertas 58mm, pola sama seperti kartu QR), `page-break-after:always` supaya tiap struk jadi "halaman" cetak sendiri (elemen terakhir dikecualikan lewat `:last-child`).
+  - `.kitchen-receipt-item`/`.kitchen-receipt-item-qty` — font 16pt tebal untuk daftar menu (permintaan eksplisit "besar agar kitchen dapat membaca dengan jelas"); `.kitchen-receipt-table` 20pt untuk nomor meja (paling mencolok); `.kitchen-receipt-meta` (jam+tanggal) dan `.kitchen-receipt-type` (BUNGKUS/MAKAN DI TEMPAT) ukuran sedang.
+  - Tetap pakai `@page { size: 58mm auto; margin:0; }` yang sudah didefinisikan untuk QR (lebar printer sama, tidak perlu duplikasi aturan halaman).
+- `src/components/KitchenPanel.js`:
+  - Tambah helper `loadPrintedIds()`/`savePrintedIds()` (localStorage, dibatasi maks 2000 entri ID terbaru supaya tidak tumbuh tanpa batas).
+  - State `receiptsToPrint` + ref `printedIdsRef`; deteksi order baru ditambahkan ke dalam `refresh()` yang sudah ada (bukan bikin polling terpisah — reuse polling yang sama dengan tampilan layar Kitchen).
+  - `useEffect` baru yang memanggil `window.print()` saat `receiptsToPrint` terisi, lalu membersihkannya lagi lewat `setTimeout(...,0)` (pola deferred-setState yang sama dipakai di halaman order customer sesi-sesi sebelumnya hari ini, supaya tidak kena lint `react-hooks/set-state-in-effect` — linter khusus proyek Next.js versi ini yang beberapa kali muncul hari ini).
+  - Markup `.kitchen-receipt-print-area` ditambah di akhir `<section>` (setelah grid kartu order) — isi: nomor pesanan+jam/tanggal (`toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'})`), nomor meja, label BUNGKUS/MAKAN DI TEMPAT, lalu daftar menu (qty × nama, item ber-`deletedAt` disaring keluar — konsisten dengan pola soft-delete yang sudah dipakai di tempat lain).
+
+### Kenapa desainnya begini
+- **Tidak mengubah schema database (tidak ada `Order.printedAt` baru)** — status "sudah dicetak" disimpan di `localStorage` sisi Kitchen Panel, bukan kolom baru di tabel `Order`. Sengaja dihindari karena proyek ini sudah 3x mengalami insiden nyata gara-gara kolom schema baru belum di-`push` ke database produksi sebelum dipakai (`creationRequestId` 14 Sept, `deletedAt`/`deletedById` 16-17 Sept — lihat catatan-catatan itu) — menambah kolom lagi untuk fitur ini akan mengulang risiko yang sama tanpa keuntungan besar (status "sudah dicetak" murni kebutuhan UI Kitchen, bukan data bisnis yang perlu konsisten lintas device/laporan). Trade-off: kalau localStorage device Kitchen dibersihkan/ganti device, riwayat "sudah dicetak" hilang dan order lama di antrean bisa tercetak ulang — dianggap risiko kecil dan dapat diterima dibanding risiko migrasi schema.
+- **Trigger dari polling Kitchen Panel yang sudah ada, bukan dari respons `POST /api/order`** — karena device yang men-submit order (HP customer) TIDAK terhubung secara fisik ke printer dapur; tidak ada cara browser HP customer memicu print di device lain lewat client-side JS murni. Satu-satunya device yang tahu kapan harus mencetak adalah device yang memang tersambung ke printer, yaitu device yang membuka layar Kitchen — makanya deteksi "order baru" logisnya ditaruh di situ, bukan di `api/order/route.js`.
+- **1 window.print() per siklus polling (bukan per order)** — supaya kalau ada beberapa order baru sekaligus, staf tidak diberondong banyak dialog print terpisah; cukup 1 dialog, beberapa halaman struk.
+- **Field struk dibatasi sesuai permintaan** (jam+tanggal, nomor meja, daftar menu) ditambah 2 info kecil yang dianggap berguna dan risikonya rendah (nomor pesanan untuk referensi, label BUNGKUS/MAKAN DI TEMPAT — sudah ada persis di tampilan layar Kitchen yang sama, bukan data baru) — bukan penambahan di luar konteks, murni supaya struk fisik sama informatifnya dengan kartu di layar.
+
+### Keterbatasan yang perlu diketahui pengguna (bukan bug, konsekuensi arsitektur)
+1. **Bukan cetak senyap** — tiap kali ada order baru, dialog print bawaan browser akan terbuka di device Kitchen; staf perlu klik "Print" (sudah dikonfirmasi ke pengguna ini oke, lihat bagian Klarifikasi).
+2. **Device Kitchen harus tetap membuka halaman Kitchen di browser** — kalau layar itu ditutup/komputer mati, tidak ada order yang tercetak sampai halaman dibuka lagi (saat itu, order yang masih ada di antrean otomatis akan tercetak sebagai batch begitu halaman dibuka/refresh, karena baru saat itu dianggap "belum pernah dicetak" oleh localStorage device tsb).
+3. **Pertama kali fitur ini dipakai**, kalau saat itu sudah ada order yang nyangkut di antrean kitchen dari sebelum fitur ini ada, order-order itu otomatis akan langsung tercetak sekaligus (dianggap wajar/diinginkan — bukan "storm" berbahaya, staf dapat salinan cetak pertama dari antrean yang sedang berjalan).
+4. **Cetak per-device** — kalau ada 2 layar Kitchen terbuka di 2 device berbeda (mis. layar utama + cadangan), keduanya akan sama-sama mencoba mencetak order baru (masing-masing punya `localStorage` sendiri) — kalau memang cuma 1 device yang tersambung fisik ke printer, device lain akan tetap memicu dialog print browser tapi tidak ada printer fisik yang menerimanya (dialog tetap harus di-cancel manual). Perlu diketahui kalau nanti setup Kitchen pakai lebih dari 1 layar.
+
+### Pengujian
+- `npx eslint src/components/KitchenPanel.js` dan `npx eslint src/app/globals.css` — dibandingkan sebelum/sesudah (`git stash` + lint ulang): **0 error, 0 warning** di kedua kondisi (tidak ada masalah pra-existing maupun baru).
+- **Belum diuji nyata dengan printer fisik atau di browser sama sekali** — sesi ini CLI-only, tidak ada akses ke device Kitchen/printer thermal sungguhan. Yang sudah diverifikasi hanya lewat baca-ulang kode: alur data (`Order` per kiriman), struktur CSS 58mm (konsisten dengan pola QR yang sudah terbukti jalan di device nyata sebelumnya), dan tidak adanya error sintaks (lolos lint).
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. **Paling prioritas — uji nyata di device Kitchen dengan printer thermal fisik**: buka halaman Kitchen di browser device yang tersambung printer, submit pesanan dari HP/browser lain sebagai customer, pastikan (a) dialog print muncul otomatis di device Kitchen dalam ≤5 detik, (b) struk yang tercetak fisik terbaca jelas (ukuran font, tidak terpotong, sejajar — sama seperti proses trial-error yang dulu dilakukan untuk struk QR), (c) submit 2 pesanan terpisah ke meja yang sama → pastikan benar-benar tercetak 2 struk fisik terpisah, bukan tergabung.
+2. Uji reload halaman Kitchen setelah beberapa order tercetak — pastikan order yang SUDAH tercetak tidak tercetak ulang (mengandalkan `localStorage`, perlu dicoba nyata karena baru diverifikasi lewat baca kode).
+3. Kalau nanti ternyata setup Kitchen pakai lebih dari 1 device/layar, diskusikan ulang soal keterbatasan #4 di atas (localStorage per-device) — mungkin perlu dipindah ke penanda server-side (`Order.printedAt`) kalau itu jadi masalah nyata, tapi itu perlu keputusan/izin pengguna dulu karena berarti migrasi schema (lihat alasan desain di atas).
+4. Backlog lama lain (agregasi soft-delete di statistik, race order vs pembayaran) tetap belum disentuh, di luar scope tugas hari ini.
+
+---
+
+## 2026-09-22 (lanjutan 7) — Claude Sonnet 5
+
+### Tugas
+Koreksi dari pengguna atas fitur struk dapur (sesi "lanjutan 6"): pemicu cetak dipindah dari menu Kitchen ke dashboard kasir utama, karena **menu Kitchen tidak akan dipakai dan rencananya dihapus sebelum aplikasi dipasarkan**. Pengguna juga menanyakan: kalau tidak pakai mode kiosk-printing (jadi tidak bisa cetak senyap), apakah bisa "beri popup dari laptop saja" — dikonfirmasi: ya, itu justru desain yang sudah dipakai sejak awal (dialog print bawaan browser), bukan hal baru yang perlu ditambah.
+
+### Perubahan kode
+- `src/components/KitchenPanel.js` — **dikembalikan 100% ke kondisi semula** (dikonfirmasi lewat `git diff` kosong setelah reverted): semua penambahan sesi lalu (helper `loadPrintedIds`/`savePrintedIds`, state `receiptsToPrint`, efek `window.print()`, markup `.kitchen-receipt-print-area`) dihapus total dari file ini. Tidak ada bagian dari fitur ini yang tersisa di komponen Kitchen — sesuai permintaan pengguna karena komponen ini rencananya dihapus sebelum launch dan tidak akan pernah dibuka.
+- `src/app/page.js` (dashboard kasir/admin, `CashierDashboard`) — logika yang sebelumnya di `KitchenPanel.js` dipindah ke sini, dengan penyesuaian supaya jalan di level dashboard (bukan per-tab):
+  - Helper module-scope `loadKitchenPrintedIds()`/`saveKitchenPrintedIds()` (sama persis, localStorage key `kitchen-printed-order-ids`, dibatasi 2000 entri) ditambah di atas komponen, sejajar dengan pattern helper lain di file ini.
+  - State `kitchenReceiptsToPrint` + ref `kitchenPrintedIdsRef`/`kitchenPrintFetchingRef` ditambah di awal komponen.
+  - Fungsi baru `checkKitchenReceipts()` (mem-fetch `GET /api/kitchen` — endpoint yang sama yang tadinya dipakai `KitchenPanel.js`, tidak ada endpoint baru) ditambah setelah `fetchTransactions`.
+  - `checkKitchenReceipts()` dipanggil di dalam `useEffect` polling yang **sudah ada** (baris ~924, yang sebelumnya cuma memanggil `fetchTransactions()` tiap 5 detik) — bukan bikin `setInterval` baru terpisah, supaya cukup 1 siklus polling. Efek ini aktif selama `!checkingAuth && currentUser` (staf sudah login), **tidak bergantung `activeTab`** — artinya cetak struk tetap jalan walau kasir sedang membuka tab Transaksi/Statistik/Menu, bukan cuma saat tab Kitchen dibuka (yang justru sudah tidak dipakai).
+  - `useEffect` pemicu `window.print()` dan markup `.kitchen-receipt-print-area` dipindah apa adanya ke `page.js` — isi struk (jam/tanggal, nomor meja, BUNGKUS/MAKAN DI TEMPAT, daftar menu font besar) **tidak berubah sama sekali** dari desain sesi sebelumnya, cuma lokasinya yang pindah.
+  - Markup print diletakkan di root return komponen (di luar semua blok `{activeTab === '...' && (...)}`), supaya tetap ter-render (walau tersembunyi di layar) apa pun tab yang sedang aktif.
+- `src/app/globals.css` — **tidak diubah sama sekali** di sesi ini. CSS `.kitchen-receipt-print-area`/`.kitchen-receipt`/dst dari sesi lalu sudah generik (tidak terikat ke komponen Kitchen manapun), jadi cukup dipakai ulang oleh markup yang sekarang ada di `page.js` tanpa modifikasi.
+
+### Kenapa desainnya begini
+- **Reuse polling yang sudah ada** (`fetchTransactions` interval) daripada bikin `setInterval` terpisah — mengurangi jumlah timer aktif, konsisten dengan pola yang sudah dipakai project ini untuk fitur lain.
+- **`GET /api/kitchen` tetap dipakai sebagai sumber data**, meskipun tab "Kitchen" sendiri tidak dipakai — karena bentuk datanya (satu `Order` = satu kiriman, lengkap dengan `items`+`menuItem`+`tableNumber`) sudah persis pas untuk struk, dan endpoint ini kemungkinan besar tetap ada di backend terlepas dari nasib menu Kitchen (dipakai juga oleh alur `kitchenStatus` yang dipakai luas di aplikasi, bukan cuma oleh komponen `KitchenPanel.js`). Tidak dibuat endpoint baru.
+- **Tetap tidak ada kolom database baru** — keputusan ini tidak berubah dari sesi sebelumnya (lihat alasan lengkap di entri "lanjutan 6": menghindari risiko migrasi schema yang sudah 3x menyebabkan insiden di proyek ini).
+- **Dialog print bawaan browser dipertahankan, tidak diganti apa pun** — pertanyaan pengguna soal "beri popup dari laptop" sebenarnya menegaskan ulang mekanisme yang SUDAH ada (klarifikasi awal sebelum implementasi sesi lalu sudah menyepakati ini), bukan permintaan fitur baru. Tidak ada perubahan pada cara `window.print()` dipanggil.
+
+### Pengujian
+- `git diff src/components/KitchenPanel.js` — **kosong**, mengonfirmasi file ini benar-benar kembali seperti sebelum sesi "lanjutan 6" (tidak ada sisa kode fitur struk yang tertinggal).
+- `npx eslint src/app/page.js` — dibandingkan sebelum/sesudah (`git stash` + lint ulang): **total problem identik, 6 error + 6 warning**, semuanya pra-existing di baris lain (pola `setState` langsung di badan efek untuk `fetchArchive`/`fetchStats`/`fetchEmployees`/`fetchTransactions`/dua state tanggal, plus 3 pemakaian `<img>`) — dikonfirmasi dengan membandingkan lokasi baris satu-per-satu, bukan cuma jumlah total. **Tidak ada error/warning baru** dari kode yang ditambahkan (`checkKitchenReceipts`, efek `window.print()`, markup struk).
+- **Belum diuji nyata dengan browser atau printer fisik** — sama seperti sesi sebelumnya, CLI-only, tidak ada akses ke device/printer sungguhan.
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. **Paling prioritas — uji nyata di laptop yang tersambung printer**: buka dashboard kasir di laptop itu (tab apa saja, tidak perlu buka tab Kitchen sama sekali), submit pesanan dari HP/browser lain sebagai customer, pastikan dialog print otomatis muncul di laptop dalam ≤5 detik dan strukturnya benar (jam/tanggal, nomor meja, daftar menu font besar, per-pesanan terpisah untuk 2x kiriman ke meja sama).
+2. Keterbatasan yang dicatat di sesi "lanjutan 6" (poin 1-4: bukan cetak senyap, laptop harus tetap membuka dashboard, batch cetak pertama kali, risiko cetak ganda kalau >1 laptop membuka dashboard sekaligus) **masih berlaku sama persis** di desain yang baru ini — cuma "device Kitchen" pada poin-poin itu sekarang dibaca sebagai "laptop dashboard kasir manapun yang sedang login". Kalau kasir punya kebiasaan buka dashboard dari 2 laptop berbeda secara bersamaan, keduanya akan sama-sama mencoba memicu print (masing-masing localStorage sendiri) — perlu diketahui pengguna.
+3. Backlog lama lain (agregasi soft-delete di statistik, race order vs pembayaran, penghapusan menu Kitchen itu sendiri — belum diminta dieksekusi sekarang, "nanti sebelum launch") tetap belum disentuh.
+
+---
+
+## 2026-09-22 (lanjutan 8) — Claude Sonnet 5
+
+### Tugas
+Koreksi tampilan struk dapur dari pengguna: buat struk lebih panjang dengan menambah ruang kosong di bagian atas (supaya bisa digantung/ditusuk di tempat struk dapur tanpa menutupi tulisan pesanan), dan perbesar sedikit ukuran teksnya.
+
+### Perubahan kode
+- `src/app/globals.css` (blok `@media print` untuk `.kitchen-receipt*`):
+  - Tambah elemen/kelas baru `.kitchen-receipt-hanger` — blok kosong setinggi 30mm, ditaruh sebagai elemen PERTAMA di dalam `.kitchen-receipt`, sebelum info jam/tanggal. Ini yang membuat struk jadi lebih panjang dan menyediakan ruang kosong di ujung atas kertas untuk digantung/ditusuk tanpa mengenai tulisan.
+  - `.kitchen-receipt` padding bawah ditambah sedikit (`3mm 0 4mm`, sebelumnya `3mm 0`) supaya ada sedikit jarak juga di ujung bawah sebelum potongan kertas berikutnya.
+  - Semua ukuran font dinaikkan satu tingkat: `.kitchen-receipt-meta` 10pt→11pt, `.kitchen-receipt-table` (nomor meja) 20pt→23pt, `.kitchen-receipt-type` (BUNGKUS/MAKAN DI TEMPAT) 13pt→14pt, `.kitchen-receipt-item`/`.kitchen-receipt-item-qty` (daftar menu) 16pt→18pt. Padding/margin di sekitarnya ikut sedikit disesuaikan (mis. `.kitchen-receipt-table` padding 1.5mm→2mm) supaya tetap proporsional dengan font yang lebih besar, bukan cuma teksnya yang membesar sementara jaraknya tetap sempit.
+- `src/app/page.js` — tambah `<div className="kitchen-receipt-hanger" />` sebagai child pertama di dalam `.kitchen-receipt` (sebelum `.kitchen-receipt-meta`), pasangan dari kelas CSS baru di atas.
+
+### Kenapa desainnya begini
+- **Ruang gantung dibuat sebagai elemen kosong terpisah (bukan sekadar `padding-top` besar di `.kitchen-receipt`)** — supaya jelas dan mudah disesuaikan lagi ukurannya secara terpisah dari padding struk itu sendiri kalau ternyata 30mm kurang/lebih panjang dari kebutuhan tempat struk yang sebenarnya (tempat struk fisik di dapur belum diketahui ukurannya, jadi 30mm ini estimasi awal yang masuk akal untuk dijepit/ditusuk, bukan angka yang diukur dari alat aslinya).
+- **Kenaikan font tidak seragam per elemen** — nomor meja (elemen paling penting untuk dikenali dari jarak jauh) dinaikkan paling besar secara proporsional (20→23pt), sementara label BUNGKUS/MAKAN DI TEMPAT (informasi sekunder) dinaikkan lebih kecil (13→14pt) — mengikuti hierarki kepentingan visual yang sama seperti desain awal, bukan menaikkan semua elemen dengan jumlah poin yang sama rata.
+- **Lebar struk (48mm) tidak diubah** — permintaan cuma soal "lebih panjang" (tinggi) dan "lebih besar" (font), bukan lebar; lebar 48mm sudah pernah diverifikasi cocok untuk printer 58mm lewat proses trial-error struk QR sebelumnya, jadi tidak diutak-atik tanpa alasan.
+
+### Pengujian
+- `npx eslint src/app/page.js` — dibandingkan sebelum/sesudah: **total problem identik, 6 error + 6 warning**, semuanya pra-existing (sama seperti sesi-sesi sebelumnya hari ini), tidak ada yang baru dari perubahan ini.
+- **Belum diuji cetak fisik** — perubahan CSS murni untuk hasil cetak, belum ada kesempatan mencoba di printer thermal nyata untuk pastikan 30mm ruang gantung itu pas (tidak kurang/berlebihan) dengan tempat struk yang sebenarnya di dapur, dan font yang lebih besar tidak sampai terpotong di lebar 48mm.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji cetak fisik: pastikan ruang kosong di atas struk (30mm) cukup untuk digantung/ditusuk di tempat struk yang dipakai, dan sesuaikan lagi angkanya (naikkan/turunkan `.kitchen-receipt-hanger { height: ... }`) kalau ternyata kurang pas.
+- Pastikan juga nomor meja yang panjang (mis. "TAKE AWAY - Nama Pelanggan Panjang") pada font 23pt tidak terpotong di lebar 48mm — sama seperti isu yang pernah muncul untuk badge nomor meja di struk QR sebelumnya, perlu dicek langsung di kertas fisik.
+- Semua uji manual browser/printer dari sesi-sesi sebelumnya hari ini (soal fitur struk dapur secara keseluruhan, batas porsi customer, sesi ditutup, dll.) masih tertunda — belum ada satupun yang diverifikasi lewat interaksi nyata karena seluruh hari ini CLI-only.
+
+---
+
+## 2026-09-22 (lanjutan 9) — Claude Sonnet 5
+
+### Tugas
+Pengguna melaporkan bug nyata (bukan dugaan, sudah dialami): struk kitchen "sering tergabung dengan struk QR code" — hasil cetak tumpang tindih antara struk QR meja dan struk kitchen.
+
+### Root cause (dibuktikan lewat baca kode, bukan dugaan)
+Kedua fitur cetak (QR meja & struk kitchen) memakai mekanisme CSS print YANG SAMA di `globals.css`: aturan global `body * { visibility: hidden; }` lalu masing-masing punya kelasnya sendiri yang dikecualikan (`.print-qr-card` untuk QR, `.kitchen-receipt-print-area` untuk struk kitchen) supaya tampil saat `window.print()` dipanggil.
+- `.print-qr-card` (`page.js:1673`) BUKAN elemen tersembunyi seperti struk kitchen — ini adalah modal QR Code yang **tetap terlihat normal di layar** selama `activeQr` (state) tidak `null`, dan baru hilang dari DOM saat staf menutup modal itu.
+- Struk kitchen (`page.js`, fitur sesi-sesi sebelumnya hari ini) otomatis mengisi `.kitchen-receipt-print-area` dan memanggil `window.print()` sendiri lewat polling setiap 5 detik, **tanpa peduli apakah modal QR sedang terbuka atau tidak**.
+- Kalau kebetulan staf sedang membuka/menampilkan QR Code satu meja (`.print-qr-card` ada di DOM) TEPAT saat ada pesanan baru masuk dan memicu auto-print struk kitchen, maka SAAT `window.print()` dipanggil, kedua elemen (`.print-qr-card` DAN `.kitchen-receipt-print-area` yang baru terisi) sama-sama dikecualikan dari `visibility:hidden` dan sama-sama `position:absolute; top:0` — hasilnya kedua struk tercetak bertumpuk di kertas yang sama. Ini persis skenario yang dilaporkan pengguna.
+
+### Perubahan kode
+- `src/app/page.js`:
+  - Efek pemicu `window.print()` untuk struk kitchen sekarang mengecek `activeQr` juga: `if (!kitchenReceiptsToPrint.length || activeQr) return;`, dan `activeQr` ditambahkan ke dependency array efek. Selama modal QR meja masih terbuka, print struk kitchen DITUNDA (bukan dibatalkan) — begitu modal QR ditutup (`activeQr` jadi `null`), efek ini langsung jalan lagi tanpa perlu menunggu siklus polling berikutnya (karena `activeQr` ada di dependency array, perubahannya langsung memicu efek).
+  - Markup `.kitchen-receipt-print-area` sekarang mengecek `!activeQr` sebelum me-render isi strukturnya (`{!activeQr && kitchenReceiptsToPrint.map(...)}`), bukan cuma menunda pemanggilan `window.print()`-nya. Ini lapisan pertahanan kedua: kalau staf mencetak QR secara MANUAL (klik tombol print QR, `page.js:1304`) sementara ada struk kitchen yang masih "menunggu" (tertunda karena poin di atas), area struk kitchen tetap kosong di DOM saat itu — tidak ikut tercetak campur dengan QR.
+
+### Kenapa desainnya begini
+- **Tidak mengubah mekanisme CSS print yang sudah ada** (`body * {visibility:hidden}` + exemption per-kelas) — itu pola yang sudah terbukti jalan untuk QR sejak lama; masalahnya bukan di situ, tapi di TIMING (dua print job berbeda bisa aktif bersamaan). Perbaikannya cukup di level JS: pastikan hanya satu jenis struk yang "aktif"/terisi dalam DOM pada satu waktu.
+- **Dua lapis penjagaan (efek DAN render), bukan cuma satu** — supaya aman dari 2 arah sekaligus: (a) auto-print kitchen tidak boleh menyela saat QR sedang tampil, (b) print manual QR juga tidak boleh "menangkap" sisa struk kitchen yang kebetulan sedang menunggu di background. Kalau cuma efeknya yang dijaga tapi markup-nya tetap terisi, print manual QR (yang tidak lewat efek ini sama sekali) masih bisa ikut mencetak struk kitchen yang nyangkut di DOM.
+- **Ditunda, bukan dibatalkan/dihapus dari antrean** — begitu modal QR ditutup, struk yang tertunda otomatis tercetak (state `kitchenReceiptsToPrint` tidak direset, cuma efeknya yang menunggu). Tidak ada pesanan yang gagal tercetak permanen gara-gara staf sedang membuka QR meja lain.
+
+### Pengujian
+- `npx eslint src/app/page.js` — dibandingkan sebelum/sesudah: **total problem identik, 6 error + 6 warning**, semuanya pra-existing (sama seperti sesi-sesi hari ini sebelumnya), tidak ada yang baru dari perubahan ini.
+- **Belum diuji cetak fisik** — perlu dicoba nyata: buka modal QR salah satu meja di laptop kasir, lalu (dari device lain) submit pesanan baru ke meja lain; pastikan struk kitchen TIDAK ikut tercetak selama modal QR masih terbuka, lalu tertutup modal QR → pastikan struk kitchen yang tadi tertunda langsung tercetak (bukan hilang).
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual seperti skenario di atas (buka QR + submit order baru bersamaan) dengan printer fisik sungguhan untuk memastikan tumpang-tindih benar-benar tidak terjadi lagi.
+- Semua uji manual browser/printer lain dari sesi-sesi sebelumnya hari ini (fitur struk dapur, ukuran/font struk, batas porsi customer, sesi ditutup) masih tertunda — belum ada satupun yang diverifikasi lewat interaksi nyata karena seluruh hari ini CLI-only.
+
+---
+
+## 2026-09-22 (lanjutan 10) — Claude Sonnet 5
+
+### Tugas
+Pengguna melaporkan: popup print struk dapur kadang tidak muncul saat pesanan masuk, dan sering harus refresh halaman dulu baru popup-nya muncul lagi. Diminta diperbaiki dan dijelaskan kenapa terjadi.
+
+### Root cause (dibuktikan lewat baca kode — regresi dari perbaikan saya sendiri di entri "lanjutan 9")
+Perbaikan tumpang-tindih struk QR/kitchen di entri "lanjutan 9" menambahkan penjagaan: struk dapur ditunda selama `activeQr` (state) tidak `null`. Ternyata penjagaan itu salah sasaran:
+- Kartu QR (`.print-qr-card`, `page.js` sekitar baris 1674) hanya benar-benar ada di DOM saat **`activeTab === 'transactions'` DAN `activeQr` terisi** — kartu itu dibungkus blok `{activeTab === 'transactions' && (...)}` (baris 1642), jadi begitu kasir pindah ke tab lain (Arsip/Statistik/Menu/Karyawan), React **meng-unmount kartu itu dari DOM sepenuhnya**, walau state `activeQr` tetap tersimpan di memori (tidak ikut ter-reset).
+- Satu-satunya baris yang me-reset `activeQr` kembali ke `null` adalah tombol "Tutup" di kartu QR itu sendiri (baris 1737). Kalau kasir membuka QR satu meja lalu **pindah tab tanpa klik "Tutup"** (skenario yang sangat wajar dalam kerja sehari-hari — mis. buka QR meja baru, lalu langsung cek tab lain), `activeQr` tetap tersimpan non-`null` **selamanya**.
+- Karena penjagaan struk dapur cuma mengecek state `activeQr` (bukan apakah kartunya benar-benar ada di layar), begitu itu terjadi, **semua auto-print struk dapur ikut macet total** — bukan cuma sementara, tapi sampai halaman di-refresh (refresh mereset SEMUA state React termasuk `activeQr` balik ke `null`). Inilah yang terasa sebagai "kadang gak muncul, refresh dulu baru muncul" — sebenarnya bukan soal browser/printer sama sekali, murni bug logika di kode yang saya tulis sendiri sesi sebelumnya.
+
+### Perubahan kode
+- `src/app/page.js`:
+  - Tambah nilai turunan `qrCardMounted = Boolean(activeQr) && activeTab === 'transactions'` — merepresentasikan kondisi SEBENARNYA "apakah `.print-qr-card` sedang ada di DOM", bukan cuma "apakah `activeQr` pernah diisi".
+  - Efek pemicu `window.print()` untuk struk dapur sekarang mengecek `qrCardMounted` (bukan `activeQr` langsung), begitu juga dependency array-nya.
+  - Markup `.kitchen-receipt-print-area` juga diubah dari `{!activeQr && ...}` jadi `{!qrCardMounted && ...}` — konsisten dengan efeknya.
+
+### Kenapa desainnya begini
+- **Tidak menghapus fitur penundaan (dari entri "lanjutan 9")** — logika "jangan cetak struk dapur bertumpuk dengan kartu QR" itu sendiri BENAR dan masih diperlukan (skenario tumpang-tindih yang dilaporkan sebelumnya nyata dan sudah dibuktikan). Yang salah cuma SUMBER kebenarannya — seharusnya dari sejak awal mengecek "apakah elemennya ada di DOM", bukan "apakah state pernah di-set", karena kartu QR memang sengaja unmount saat pindah tab (bukan cuma disembunyikan via CSS) padahal statenya tidak ikut direset.
+- **Tidak menambah `useEffect` baru untuk auto-reset `activeQr` saat pindah tab** — sempat dipertimbangkan (supaya state selalu sinkron dengan apa yang tampil), tapi itu akan MENGUBAH perilaku yang sudah ada: saat ini kalau kasir buka QR meja lalu pindah-pindah tab lalu balik lagi ke tab Transaksi, kartu QR yang tadi dibuka akan otomatis muncul lagi (statenya masih tersimpan) — kemungkinan ini memang perilaku yang diinginkan/dipakai kasir sehari-hari, jadi tidak diubah tanpa izin. Perbaikan cukup di titik yang benar-benar menyebabkan bug (penjagaan struk dapur), bukan mengubah perilaku modal QR.
+
+### Pengujian
+- `npx eslint src/app/page.js` — dibandingkan sebelum/sesudah: **total problem identik, 6 error + 6 warning**, semuanya pra-existing (sama seperti sesi-sesi hari ini sebelumnya), tidak ada yang baru dari perubahan ini.
+- **Belum diuji browser nyata** — skenario yang perlu dicoba: buka QR salah satu meja, pindah ke tab lain (Arsip/Statistik) TANPA klik "Tutup", lalu (dari device lain) submit pesanan baru; pastikan popup print struk dapur tetap muncul otomatis meski kartu QR "ketinggalan" di state (tidak lagi macet sampai refresh).
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual sesuai skenario di atas dengan browser & printer fisik sungguhan.
+- Kalau nanti pengguna MEMANG mau perilaku modal QR diubah (auto-tertutup saat pindah tab, bukan cuma tidak lagi memblokir print), itu perubahan UX terpisah yang perlu diminta eksplisit — belum dikerjakan di sesi ini karena di luar apa yang dilaporkan.
+- Semua uji manual browser/printer lain dari sesi-sesi sebelumnya hari ini masih tertunda.
+
+---
+
+## 2026-09-22 (lanjutan 11) — Claude Sonnet 5
+
+### Tugas
+Pengguna melaporkan perbaikan sesi "lanjutan 10" belum menyelesaikan masalah: popup print struk dapur **masih tetap tidak muncul otomatis setelah pesanan dikirim**, tapi muncul begitu pindah menu/tab. Diminta diperbaiki supaya popup muncul setelah pesanan terkirim **tanpa perlu refresh DAN tanpa perlu pindah menu**.
+
+### Root cause (diverifikasi lewat pencarian sumber resmi, bukan dugaan)
+Sebelum menambal lagi, dicari referensi tentang perilaku `window.print()` dari `setInterval` di Chrome — ditemukan penjelasan resmi dari diskusi tim Chromium (WICG interventions) yang cocok persis dengan gejala yang dilaporkan:
+- Chrome menggerbangi operasi "sensitif" (termasuk `window.print()`) di belakang **aktivasi pengguna** ("user activation" — status sementara yang aktif setelah klik/keypress asli).
+- Status aktivasi ini **ikut terbawa hanya di eksekusi PERTAMA `setInterval`/`setTimeout`, tidak di eksekusi-eksekusi berikutnya**.
+- Spesifikasi WHATWG sendiri secara eksplisit mengizinkan browser **diam-diam mengabaikan** panggilan `print()` tanpa error/exception apa pun.
+- Ini menjelaskan gejala persis: percobaan auto-print dari polling 5 detik (`checkKitchenReceipts`, dipanggil dari `setInterval` yang sudah berjalan lama, bukan eksekusi pertama) kehilangan status aktivasi → Chrome diam-diam menolak menampilkan dialog. Sebaliknya, klik pindah tab (`onClick={() => setActiveTab(...)}`) adalah interaksi nyata yang memicu ulang efek polling (`activeTab` ada di dependency array-nya) — percobaan print yang menyertainya kebetulan "menumpang" aktivasi dari klik itu, makanya berhasil.
+- **Kesimpulan penting**: ini pembatasan keamanan bawaan Chrome yang disengaja (mencegah situs web memaksa dialog print berulang-ulang tanpa interaksi), **bukan bug yang bisa 100% dihilangkan lewat kode murni**. Cetak otomatis total tanpa klik sama sekali hanya bisa dijamin lewat konfigurasi khusus di luar kode (mode kiosk-printing Chrome) — opsi ini sudah ditanyakan ke pengguna di awal implementasi fitur dan sengaja tidak dipakai (dijawab "popup tidak masalah").
+
+### Perubahan kode
+- `src/app/page.js`:
+  - Tambah state `kitchenRecentPrints` — daftar pesanan yang baru saja DICOBA dicetak otomatis lewat polling (maksimal 10 entri terbaru, di-dedup by id), disimpan terpisah dari `kitchenReceiptsToPrint` (yang tetap dikosongkan segera seperti sebelumnya).
+  - Efek pemicu `window.print()` sekarang, setiap kali mencoba mencetak, JUGA mencatat batch itu ke `kitchenRecentPrints` (lewat `setTimeout(...,0)` supaya tidak kena lint `react-hooks/set-state-in-effect` yang sama seperti beberapa kali sebelumnya hari ini — sempat kena error ini di percobaan pertama, sudah diperbaiki).
+  - Fungsi baru `reprintKitchenReceipts()` — dipanggil dari tombol manual, set ulang `kitchenReceiptsToPrint` ke isi `kitchenRecentPrints` (memicu efek print yang sama), lalu kosongkan `kitchenRecentPrints`.
+  - Tombol/banner mengambang baru (`position:fixed`, pojok kanan-bawah, `zIndex:2000`) — **muncul di SEMUA tab, tidak perlu pindah menu untuk melihatnya** — begitu `kitchenRecentPrints.length > 0`. Isinya: jumlah struk yang menunggu, tombol "Cetak Sekarang" (klik asli → memicu ulang `window.print()`, dijamin tidak ditolak Chrome karena ini interaksi pengguna sungguhan), dan tombol sembunyikan (✕, kalau kasir sudah yakin sudah tercetak lewat cara lain).
+
+### Kenapa desainnya begini
+- **Tidak berusaha "memaksa" browser menampilkan dialog print tanpa interaksi** — ini bukan sesuatu yang bisa dijamin lewat kode berdasarkan bukti/sumber di atas; memaksakan solusi seperti itu (mis. trik-trik tidak resmi) berisiko rapuh dan bisa berhenti bekerja kapan saja mengikuti perubahan kebijakan Chrome, tanpa ada jaminan sama sekali.
+- **Tombol jaring-pengaman diletakkan di ROOT (di luar blok tab manapun)** — persis pola yang sama dengan area cetak struk itu sendiri (`kitchen-receipt-print-area`), supaya benar-benar tidak perlu pindah tab untuk mengaksesnya, sesuai permintaan eksplisit "tidak perlu pindah menu".
+- **Tidak menghapus/mengganti percobaan auto-print yang sudah ada** — auto-print tetap dicoba setiap kali (kadang berhasil, terutama kalau kebetulan menyusul interaksi pengguna lain), tombol manual ini murni tambahan jaring pengaman untuk kasus ketika auto-print gagal diam-diam, bukan pengganti total.
+- **`kitchenRecentPrints` dipisah dari `kitchenReceiptsToPrint`** — supaya area cetak (`.kitchen-receipt-print-area`, dipakai untuk `window.print()`) tetap kosong di antara percobaan (mencegah kebocoran render yang sudah dibahas di sesi "lanjutan 9"), sementara daftar "masih perlu dicetak ulang?" tetap ada untuk ditampilkan sebagai teks biasa di banner (bukan lewat print media).
+
+### Pengujian
+- `npx eslint src/app/page.js` — sempat memunculkan 1 error baru di percobaan pertama (`setKitchenRecentPrints` dipanggil langsung di badan efek) — diperbaiki dengan memindahkannya ke dalam `setTimeout(...,0)` yang sudah ada. Setelah diperbaiki: **total problem kembali identik dengan baseline, 6 error + 6 warning**, semuanya pra-existing, tidak ada yang baru dari perubahan final.
+- **Belum diuji browser nyata** — perlu dicoba: submit pesanan baru dari device lain TANPA menyentuh dashboard kasir sama sekali; kalau popup print tidak muncul otomatis (karena pembatasan Chrome di atas), pastikan tombol "🖨️ N struk dapur menunggu dicetak — Cetak Sekarang" muncul mengambang di pojok kanan-bawah APAPUN tab yang sedang dibuka, dan klik tombolnya benar-benar membuka dialog print.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual browser sesuai skenario di atas.
+- **Perlu didiskusikan ulang dengan pengguna**: kalau cetak otomatis 100% tanpa klik sama sekali benar-benar wajib (bukan cukup dengan jaring-pengaman tombol manual), satu-satunya cara yang benar-benar dijamin adalah mode kiosk-printing Chrome (`--kiosk-printing` saat membuka browser di laptop kasir) — ini konfigurasi di luar kode aplikasi (shortcut/launcher khusus di device kasir), bukan sesuatu yang bisa diselesaikan lewat perubahan kode lagi. Sudah pernah ditanyakan di awal implementasi dan dijawab tidak perlu; kalau sekarang berubah pikiran, saya bisa bantu jelaskan cara setup-nya.
+- Semua uji manual browser/printer lain dari sesi-sesi sebelumnya hari ini masih tertunda.
+
+---
+
+## 2026-09-22 (lanjutan 12) — Claude Sonnet 5
+
+### Tugas
+Pengguna melaporkan lagi: "kirim pesanan, struk tidak memunculkan popup untuk struk di kitchen" — laporan baru setelah perbaikan "lanjutan 11" (banner jaring-pengaman), yang saat itu ditulis belum sempat diuji browser nyata sama sekali.
+
+### Diagnosa (tidak bisa diverifikasi lewat eksekusi nyata — `chromium-cli` tidak tersedia di environment ini dan kredensial `kasir_local` tidak tersimpan; diagnosa murni dari pembacaan kode + konfirmasi pengguna lewat pertanyaan langsung)
+Ditanya ke pengguna: banner "🖨️ N struk dapur menunggu dicetak" dari sesi "lanjutan 11" **sempat muncul** untuk pesanan pertama, tapi setelah banner itu ditutup (✕) dan pesan lagi, banner **tidak muncul sama sekali** untuk pesanan berikutnya. Dikonfirmasi ke pengguna: kartu QR Code meja (`activeQr`) kemungkinan besar sedang terbuka di layar dashboard saat itu — **dibenarkan pengguna**.
+
+**Root cause (terbukti dari kode, dikonfirmasi skenarionya oleh pengguna):**
+- `page.js` (sebelum perbaikan sesi ini) menggabungkan DUA hal dalam SATU efek yang sama-sama di-gate oleh `qrCardMounted`: (1) percobaan `window.print()` — sengaja ditunda selama kartu QR meja terbuka (mencegah struk dapur tercetak tumpang tindih dengan QR, keputusan yang benar dari sesi "lanjutan 9"), dan (2) pencatatan batch ke `kitchenRecentPrints` (state yang menggerakkan banner "Cetak Sekarang") — yang **seharusnya TIDAK ikut ditunda**, tapi baris `if (!kitchenReceiptsToPrint.length || qrCardMounted) return;` membuat SELURUH efek (termasuk pencatatan banner) berhenti lebih awal.
+- Akibatnya: kalau kartu QR meja sedang terbuka saat pesanan baru masuk, bukan cuma `window.print()` yang tertunda (itu memang disengaja) — **banner jaring-pengaman juga ikut tidak muncul sama sekali**, padahal itu satu-satunya alasan banner itu ada. Kasir tidak dapat notifikasi apa pun sampai kartu QR ditutup.
+- Ini masuk akal secara alur kerja nyata: kasir sering perlu membuka kartu QR meja berulang kali (mis. menunjukkan link ke pelanggan lain) sambil pesanan-pesanan baru terus masuk dari meja lain.
+
+### Perubahan kode
+- `src/app/page.js`:
+  - Efek pemicu `window.print()` (sekitar baris 956 sebelumnya) **dipecah jadi 2 efek terpisah**:
+    1. Efek baru (jalan lebih dulu): begitu `kitchenReceiptsToPrint` terisi, **langsung** mencatatnya ke `kitchenRecentPrints` (dedup by id, maksimal 10) — **tidak lagi di-gate oleh `qrCardMounted`**. Tetap dibungkus `setTimeout(...,0)` supaya tidak kena lint `react-hooks/set-state-in-effect` (pola yang sama dipakai di seluruh file ini).
+    2. Efek lama (perilaku TIDAK diubah): tetap `return` lebih awal selama `qrCardMounted`, tetap memanggil `window.print()` dan menandai `kitchenPrintedIdsRef` hanya saat kartu QR benar-benar tidak terbuka. Bagian pencatatan ke `kitchenRecentPrints` dihapus dari efek ini (sudah diurus efek baru di atas) — efek ini sekarang murni fokus ke percobaan cetak + membersihkan antrean `kitchenReceiptsToPrint`-nya sendiri.
+  - `reprintKitchenReceipts()` (tombol "Cetak Sekarang") — tambah pengecekan `qrCardMounted` di awal: kalau kartu QR masih terbuka saat tombol diklik, tampilkan `alert()` minta tutup kartu QR dulu, bukan diam-diam tidak melakukan apa-apa (sebelumnya klik saat QR terbuka akan membuat batch langsung "memantul" balik ke banner tanpa penjelasan apa pun ke staf).
+
+### Kenapa desainnya begini
+- **Tidak menghapus logika penundaan `window.print()` selama QR terbuka** — itu perbaikan yang benar dari sesi "lanjutan 9" (mencegah struk kitchen tercetak tumpang tindih dengan QR meja) dan masih diperlukan. Yang salah HANYA cakupannya — seharusnya cuma menunda pemanggilan `print()`, bukan ikut membungkam notifikasi banner.
+- **Retry otomatis saat kartu QR ditutup masih dipertahankan** — karena efek `window.print()` (efek ke-2) TIDAK diubah kondisinya, begitu `qrCardMounted` balik ke `false` (klik "Tutup" = interaksi asli, membawa user-activation Chrome), efek itu tetap otomatis jalan lagi seperti sebelumnya — perilaku ini terbukti benar dari sesi "lanjutan 10" dan sengaja tidak disentuh.
+- **Banner tetap "sticky" (tidak otomatis hilang setelah dicetak)** — konsisten dengan desain sesi "lanjutan 11": karena tidak ada cara pasti tahu dialog print benar-benar muncul/berhasil, banner baru hilang kalau staf klik ✕ secara eksplisit. Efek baru untuk mencatat banner ini murni menambah *kapan* pencatatan terjadi (lebih awal, tidak nunggu qrCardMounted), bukan mengubah kapan banner hilang.
+- **Alert di `reprintKitchenReceipts()` saat QR masih terbuka** — sebelum perubahan ini, klik tombol saat itu bukan tanpa efek total (memicu efek print yang langsung `return` lalu batch "dipantulkan" balik oleh efek banner baru), hanya saja staf tidak tahu kenapa print tidak terjadi. `alert()` eksplisit dipilih (bukan disable tombol) karena tombol ini memang harus selalu terlihat/aktif sebagai jaring pengaman utama, dan `alert()` sudah jadi pola error-notice yang dipakai di banyak tempat lain di file ini.
+
+### Pengujian
+- `npx eslint src/app/page.js` — sempat 7 error (1 baru: `setKitchenRecentPrints` dipanggil langsung di badan efek baru) di percobaan pertama, diperbaiki dengan membungkusnya `setTimeout(...,0)` sama seperti efek lain di file ini. Setelah diperbaiki: **kembali ke baseline 6 error + 6 warning**, semuanya pra-existing (dikonfirmasi via diagnostic tool terpisah sebelum & sesudah — semua nama variabel unused pra-existing tidak berubah), tidak ada yang baru dari perubahan sesi ini.
+- **Belum diuji browser/printer nyata** — dicoba dulu lewat `chromium-cli` (skill `run`) tapi tool itu **tidak tersedia** di environment ini (`npx chromium-cli` → 404, paket tidak ada di registry npm) dan kredensial database `kasir_local` tidak tersimpan di sesi/memori (sesuai aturan proyek "jangan simpan password"), jadi reproduksi otomatis penuh tidak bisa dilakukan sesi ini. Diagnosa root cause di atas murni dari pembacaan kode + konfirmasi langsung dari pengguna lewat pertanyaan (bukan dugaan tak terverifikasi), tapi PERBAIKANNYA SENDIRI belum dibuktikan lewat eksekusi nyata.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- ~~Paling prioritas: uji manual di browser sungguhan~~ — **SUDAH DIKONFIRMASI PENGGUNA**: begitu kartu QR ditutup, popup print langsung muncul. Skenario inti (banner/print tertahan gara-gara kartu QR terbuka) **terbukti selesai lewat pengujian nyata oleh pengguna**, bukan cuma pembacaan kode.
+- Belum eksplisit dikonfirmasi ulang oleh pengguna: banner MUNCUL (bukan cuma print langsung sukses) saat QR masih terbuka, dan alert saat klik "Cetak Sekarang" sementara QR terbuka. Perilaku initi (print tertunda → langsung keluar begitu QR ditutup) sudah terbukti benar, dua detail itu konsekuensi logis dari kode yang sama sehingga kemungkinan besar juga benar, tapi belum diverifikasi terpisah.
+- Semua uji manual browser/printer lain dari sesi-sesi sebelumnya hari ini (soal fitur struk dapur secara keseluruhan) masih tertunda.
+
+**Status: TERBUKTI SELESAI** untuk laporan bug "popup struk kitchen tidak muncul saat kartu QR terbuka".
+
+---
+
+## 2026-09-22 (lanjutan 13) — Claude Sonnet 5
+
+### Tugas
+Pengguna minta audit umum: "ada bug/error apa lagi yang ada dalam sistem". Diminta laporan lengkap dulu sebelum menentukan prioritas perbaikan.
+
+### Temuan — audit backlog lama + 1 temuan baru
+
+**1. 🔴 BARU DITEMUKAN & SUDAH DIPERBAIKI sesi ini — race condition di `POST /api/order`: pesanan yang terlambat sampai bisa membuka-lagi transaksi yang baru saja dibayar/dibatalkan**
+- Lokasi: `src/app/api/order/route.js` (sebelum perbaikan: baris ~67 dan ~113-119).
+- Ini sebenarnya PERSIS temuan "prioritas tinggi" yang sudah pernah dilaporkan sesi Codex 2026-09-16 ("diff ec35c98 menghapus penguncian sesi sebelum validasi order") — waktu itu ditulis "dampak concurrency belum direproduksi, task baru: uji bersamaan". Task itu **tidak pernah dikerjakan** sampai sesi ini, dan bug-nya **masih ada persis sama** saat diverifikasi ulang lewat pembacaan kode (bukan dugaan) hari ini.
+- Bukti: status transaksi (`open`/`ordered`/`completed`/`cancelled`) cuma dicek SEKALI di luar transaksi database terkunci (fast pre-flight check), sebelum beberapa query lain yang makan waktu (cek idempotency, rate limit, batas porsi sesi). Setelah itu, `tx.transaction.update({where:{id:transactionId}, data:{..., status:'ordered', ...}})` menulis TANPA syarat status apa pun — memaksa status balik ke `'ordered'` apa pun kondisi sekarang.
+- Skenario nyata: customer submit order saat koneksi lemot bersamaan kasir klik "Bayar" untuk meja yang sama. Kalau request order itu akhirnya diproses SETELAH pembayaran commit, transaksi yang sudah `completed` **diam-diam berubah balik jadi `'ordered'`**, dengan order baru `kitchenStatus:'queued'` menyelip masuk — tanpa error ke kasir maupun customer.
+- Kenapa lolos dari perlindungan yang sudah ada: `pg_advisory_xact_lock` yang dipakai route ini cuma menyerialisasi terhadap PANGGILAN LAIN KE ROUTE INI SENDIRI (mis. dua submit order bersamaan) — TIDAK berinteraksi sama sekali dengan row-lock (`updateMany increment:0`) yang dipakai `PUT /api/transaction/[id]` (pembayaran/batal) maupun `edit-order/route.js`, karena keduanya mekanisme locking yang berbeda di Postgres (advisory lock vs row lock).
+
+### Perbaikan kode
+- `src/app/api/order/route.js` — di dalam blok `prisma.$transaction`, setelah pengecekan idempotency (`doubleCheck`) dan SEBELUM pengecekan rate-limit/batas sesi, ditambah:
+  - `tx.transaction.updateMany({where:{id:transactionId}, data:{total:{increment:0}}})` — row-lock sungguhan (bukan advisory lock), pola yang SAMA PERSIS dipakai `PUT /api/transaction/[id]` dan `edit-order/route.js` untuk hal yang sama. Karena keduanya sama-sama melakukan `UPDATE` nyata ke baris `Transaction` yang sama, Postgres otomatis menyerialisasi mereka di level baris — inilah yang menutup celah race-nya.
+  - `tx.transaction.findUnique({where:{id:transactionId}})` — baca ulang status TERBARU setelah row-lock didapat (bukan pakai `session` lama yang dibaca di luar transaksi).
+  - Validasi ulang: kalau status bukan `open`/`ordered` atau `completedAt` sudah terisi → `SESSION_CLOSED` (409), sama seperti pesan error pre-flight check yang sudah ada. Sekalian re-validasi overflow total pakai `current.total` yang segar (bukan `session.total` yang berpotensi basi).
+
+### Kenapa desainnya begini
+- **Tidak mengganti mekanisme advisory lock yang sudah ada** — itu tetap dibutuhkan untuk tujuan aslinya (menyerialisasi submit order beruntun ke meja yang sama, supaya cek rate-limit/batas-porsi tidak bisa dilewati race antar-submit). Row-lock baru ini punya tujuan BERBEDA (menyerialisasi terhadap PEMBAYARAN), jadi ditambahkan, bukan menggantikan.
+- **Pakai pola row-lock yang sudah terbukti benar di 2 tempat lain** (`transaction/[id]/route.js` PUT & DELETE, `edit-order/route.js`) — bukan bikin mekanisme baru, supaya konsisten dan sudah teruji polanya di kodebase yang sama.
+- **Pre-flight check di luar transaksi TIDAK dihapus** — tetap berguna sebagai fast-path (gagal cepat untuk kasus jelas-jelas sesi sudah tutup, tanpa perlu buka transaksi database dulu). Pengecekan di dalam lock adalah yang OTORITATIF/menutup race, bukan pengganti.
+
+### Pengujian
+- `npx eslint src/app/api/order/route.js` — 0 error, 0 warning (sama seperti sebelum perubahan).
+- **Belum diuji lewat eksekusi nyata** (load test/race simulation) — tidak ada akses ke database `kasir_local` atau tool browser-automation di sesi ini (sama seperti kendala di entri "lanjutan 12" di atas). Perbaikan ini murni berdasarkan pembacaan kode yang membuktikan CELAH-nya ada (baris `where` tanpa syarat status, terbukti langsung dari kode) dan CARA MENUTUPNYA konsisten dengan pola locking yang sudah terbukti benar di tempat lain dalam kodebase yang sama — tapi belum ada bukti eksekusi race 2 request bersamaan pasca-perbaikan.
+
+**2. 🟡 DIKONFIRMASI ULANG, BELUM DIPERBAIKI — Statistik "Rincian Performa" & Rekap Harian ikut menghitung item yang sudah dihapus kasir (soft-delete)**
+- Lokasi: `page.js:428` (`calculateTableStats`) dan `page.js:604` (`calculateDailyRecap`) — kedua fungsi melakukan `order.items.forEach(...)` untuk membangun `itemMap` (dasar "Menu Terlaris", porsi/meja, rekap per jam) TANPA memeriksa `item.deletedAt`.
+- Card total pendapatan di level atas (`totalRevenueOverall`, `page.js:350`) **sudah benar** karena sumbernya `trx.total` (otomatis ter-update benar oleh `edit-order/route.js` saat item dihapus) — jadi HANYA breakdown detail (per-menu/per-meja/per-jam) yang salah, bukan angka total utama. Kalau ada transaksi yang pernah di-edit (item dihapus), breakdown ini akan lebih besar dari card total di atasnya — inkonsistensi yang kelihatan di layar.
+- Pertama tercatat 2026-09-17. Pengguna belum memutuskan mau diperbaiki sekarang atau nanti — **belum disentuh sesi ini**, menunggu keputusan.
+
+**3. 🟡 Sudah tercatat sebelumnya, masih pending keputusan bisnis — Edit Pesanan reset `kitchenStatus` ke `queued` meski item DIKURANGI (bukan cuma ditambah)**
+- Lokasi: `edit-order/route.js:43` — diverifikasi ulang hari ini, kondisinya (`changed=true` dipicu baik oleh soft-delete item maupun perubahan quantity) masih sama seperti temuan 2026-09-12. **Belum diubah**, masih menunggu keputusan pengguna.
+
+**4. Item lama lain (bukan bug kode, murni keputusan bisnis/pengujian fisik yang belum dilakukan)** — tidak berubah dari catatan-catatan sebelumnya: definisi "Jam Paling Sibuk", apakah durasi Take Away ikut dihitung di rata-rata durasi meja, dan pengujian cetak fisik (QR + struk kitchen) dengan printer thermal sungguhan.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- **Prioritas berikutnya (dikonfirmasi pengguna)**: pengguna sudah pilih memperbaiki temuan #1 (race condition pembayaran) lebih dulu — **sudah dikerjakan sesi ini**, lihat di atas. Item #2, #3, #4 masih menunggu keputusan pengguna soal urutan berikutnya.
+- **Perlu diuji nyata**: simulasikan 2 request bersamaan (submit order + PUT pembayaran untuk transaksi yang sama, timing berdekatan) di database `kasir_local` untuk membuktikan perbaikan #1 benar-benar menutup race-nya — belum dilakukan sesi ini karena keterbatasan akses (lihat bagian Pengujian).
+- Item #2 (statistik) siap dikerjakan kapan saja pengguna minta — sudah jelas lokasinya, tidak perlu keputusan bisnis, cuma butuh waktu implementasi + testing manual di browser (bandingkan angka sebelum/sesudah hapus 1 item).
