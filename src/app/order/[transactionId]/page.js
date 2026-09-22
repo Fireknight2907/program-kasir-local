@@ -102,10 +102,22 @@ export default function OrderPage({ params }) {
     fetchData();
   }, [transactionId]);
 
+  // Session closed mid-session (customer had the menu or success screen open when staff
+  // completed payment). closedRef just mirrors this for imperative code (polling loop, cart
+  // guard) outside of render; the actual screen switch is a derived value below (sessionClosedMidView),
+  // not setState-in-effect, so it can't trigger cascading renders.
+  const closedRef = useRef(false);
+  useEffect(() => {
+    if (transaction && !['open', 'ordered'].includes(transaction.status)) closedRef.current = true;
+  }, [transaction]);
+  // Force the same minimal "sesi ditutup" screen used on fresh loads — no menu, no cart, no
+  // buttons — instead of leaving the interactive screen up with just a banner on top.
+  const sessionClosedMidView = !error && !!transaction && !['open', 'ordered'].includes(transaction.status);
+
   useEffect(() => {
     let stopped = false, busy = false;
     async function refreshStatus() {
-      if (busy) return; busy = true;
+      if (busy || closedRef.current) return; busy = true;
       try {
         const res = await fetch('/api/transaction/' + transactionId, {cache:'no-store',signal:AbortSignal.timeout(10000)});
         if (!res.ok) throw new Error();
@@ -114,7 +126,12 @@ export default function OrderPage({ params }) {
       } catch { if (!stopped) setConnectionError('Koneksi terputus. Status terakhir mungkin belum terbaru; hubungi staf jika perlu.'); }
       finally { busy = false; }
     }
-    const timer = setInterval(refreshStatus, 5000);
+    const timer = setInterval(() => {
+      // Session closed while this tab was open (e.g. staff just finished payment) — stop
+      // polling entirely instead of hitting the server forever for a session that can't reopen.
+      if (closedRef.current) { clearInterval(timer); return; }
+      refreshStatus();
+    }, 5000);
     return () => { stopped = true; clearInterval(timer); };
   }, [transactionId]);
 
@@ -138,6 +155,9 @@ export default function OrderPage({ params }) {
     return transaction.orders.reduce((sum, order) => sum + (order.items || []).reduce((s, item) => s + (Number(item.quantity) || 0), 0), 0);
   };
   const sessionLimitReached = getAggregatedTotalItemCount() >= ORDER_LIMITS.perSession;
+  // Soft notice: cumulative order already bigger than a single kiriman's cap. Informational
+  // only (doesn't block) — the hard block is sessionLimitReached at 100 porsi.
+  const bigOrderNotice = !sessionLimitReached && getAggregatedTotalItemCount() >= ORDER_LIMITS.perSubmission;
 
   const formatCountdown = (seconds) => {
     if (seconds >= 60) {
@@ -149,7 +169,7 @@ export default function OrderPage({ params }) {
   };
 
   const updateCart = (item, delta) => {
-    if (submittingRef.current || pendingRef.current || sessionLimitReached) return;
+    if (submittingRef.current || pendingRef.current || sessionLimitReached || closedRef.current) return;
     setCart(prev => {
       const currentQty = prev[item.id]?.quantity || 0;
       const newQty = Math.max(0, Math.min(ORDER_LIMITS.perMenu, currentQty + delta));
@@ -338,10 +358,10 @@ export default function OrderPage({ params }) {
     </div>
   );
 
-  if (error) return (
+  if (error || sessionClosedMidView) return (
     <div className="container text-center mt-4 p-4">
       <div className="glass-card" style={{ maxWidth: '500px', margin: '0 auto', textAlign: 'center', padding: '2rem' }}>
-        <h2 className="text-primary">{error}</h2>
+        <h2 className="text-primary">{error || 'Transaksi ini sudah selesai.'}</h2>
         <p className="mt-4">Silakan hubungi kasir untuk mendapatkan QR Code baru.</p>
       </div>
     </div>
@@ -474,6 +494,13 @@ export default function OrderPage({ params }) {
               </p>
             </div>
           )}
+          {bigOrderNotice && ['open', 'ordered'].includes(transaction?.status) && (
+            <div style={{ marginBottom: '1rem', background: 'rgba(245, 158, 11, 0.1)', padding: '0.85rem 1rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+              <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: '#92400e' }}>
+                Anda sudah memesan {ORDER_LIMITS.perSubmission} porsi atau lebih. Jika ingin memesan lebih banyak lagi, silakan panggil kasir.
+              </p>
+            </div>
+          )}
 
           <button
             className="btn btn-outline"
@@ -521,8 +548,12 @@ export default function OrderPage({ params }) {
           Pesanan sudah melewati {ORDER_LIMITS.perSession} porsi. Panggil karyawan jika ingin menambah pesanan.
         </p>
       )}
+      {bigOrderNotice && (
+        <p role="status" style={{ padding: 16, background: '#fef3c7', color: '#92400e', fontWeight: 700, textAlign: 'center' }}>
+          Anda sudah memesan {ORDER_LIMITS.perSubmission} porsi atau lebih. Jika ingin memesan lebih banyak lagi, silakan panggil kasir.
+        </p>
+      )}
 
-      <p role="status" style={{ padding: '0.75rem', textAlign: 'center' }}>Maksimal {ORDER_LIMITS.perMenu} porsi per menu, {ORDER_LIMITS.perSubmission} porsi per kiriman, {ORDER_LIMITS.perSession} porsi per sesi, dan {ORDER_LIMITS.perMinute} kiriman per menit. Pesanan lebih besar: hubungi kasir.</p>
       {rateLimitSecondsLeft > 0
         ? <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c', fontWeight: 700 }}>Terlalu banyak pengiriman. Coba lagi setelah {formatCountdown(rateLimitSecondsLeft)}.</p>
         : submitMessage && <p role="alert" style={{ padding: '0.75rem', textAlign: 'center', color: '#b91c1c' }}>{submitMessage}</p>}
@@ -976,18 +1007,18 @@ export default function OrderPage({ params }) {
                 <ShoppingBag size={20} style={{ color: '#ef4444' }} />
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Detail Keranjang Pesanan</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setShowCartModal(false)}
-                style={{ 
-                  background: 'rgba(239, 68, 68, 0.1)', 
-                  color: '#ef4444', 
-                  border: 'none', 
-                  cursor: 'pointer', 
-                  width: '32px', 
-                  height: '32px', 
-                  borderRadius: '50%', 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  color: '#ef4444',
+                  border: 'none',
+                  cursor: 'pointer',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 'bold'
                 }}
@@ -995,6 +1026,49 @@ export default function OrderPage({ params }) {
                 <X size={20} />
               </button>
             </div>
+
+            {/* Peringatan batas — ditaruh di dalam modal karena halaman di belakang backdrop blur tidak terbaca.
+                submitMessage juga dicek di sini (bukan cuma sessionLimitReached/rateLimitSecondsLeft) supaya
+                penolakan SESSION_LIMIT dari server (setelah klik "Kirim Pesanan Sekarang") tetap terlihat
+                selagi modal masih terbuka, bukan hanya tampil di halaman belakang yang blur. */}
+            {(sessionLimitReached || rateLimitSecondsLeft > 0 || submitMessage) && (
+              <div style={{
+                marginBottom: '1rem',
+                background: '#fee2e2',
+                border: '1px solid #fca5a5',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem'
+              }}>
+                <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>⚠️</span>
+                <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: '#991b1b' }}>
+                  {sessionLimitReached
+                    ? `Pesanan sudah melewati ${ORDER_LIMITS.perSession} porsi. Panggil karyawan jika ingin menambah pesanan.`
+                    : rateLimitSecondsLeft > 0
+                    ? `Terlalu banyak pengiriman. Coba lagi setelah ${formatCountdown(rateLimitSecondsLeft)}.`
+                    : submitMessage}
+                </p>
+              </div>
+            )}
+            {bigOrderNotice && !sessionLimitReached && rateLimitSecondsLeft === 0 && !submitMessage && (
+              <div style={{
+                marginBottom: '1rem',
+                background: '#fef3c7',
+                border: '1px solid #fcd34d',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem'
+              }}>
+                <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>ℹ️</span>
+                <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: '#92400e' }}>
+                  Anda sudah memesan {ORDER_LIMITS.perSubmission} porsi atau lebih. Jika ingin memesan lebih banyak lagi, silakan panggil kasir.
+                </p>
+              </div>
+            )}
 
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               {Object.values(cart).map(item => (

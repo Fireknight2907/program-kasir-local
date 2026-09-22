@@ -566,3 +566,132 @@ Ini persis 3 bug yang sudah **TERBUKTI** oleh Codex hari ini lewat pengujian nya
 - Uji manual di browser: (a) scan QR sama berkali-kali sampai total ≥100 porsi, pastikan banner & tombol terkunci muncul benar; (b) kirim pesanan cepat berturut-turut, pastikan hitung mundur rate-limit tampil dan berjalan turun tiap detik; (c) buka tab A & B untuk transaksi yang sama, submit di A, sebelum respons balik buka tab B (localStorage sama) dan submit juga — pastikan salah satu tab akhirnya menampilkan "Pesanan Berhasil Terkirim!", bukan pesan error.
 - Backlog lama dari sesi-sesi sebelumnya masih belum disentuh (di luar scope tugas hari ini): agregasi item soft-delete di `page.js` (rekap/statistik ikut menghitung item terhapus), migrasi soft-delete produksi belum diverifikasi ulang, race order vs pembayaran/penghapusan sesi (berbeda dari 3 race yang diperbaiki hari ini), integrasi printer struk dapur, keputusan bisnis jam sibuk/durasi take away/reset kitchenStatus.
 - Catatan desain: agregat `currentItemAgg`/`submittedAgg` di `api/order/route.js` (dipakai untuk cek batas 100 porsi) tidak memfilter `OrderItem.deletedAt` — perilaku ini **sudah ada sejak sebelum sesi ini** (tidak diubah), artinya item yang di-soft-delete kasir lewat Edit Pesanan tetap ikut dihitung ke kuota 100 porsi customer. Tidak diperbaiki hari ini karena di luar scope (3 race condition), tapi dicatat sebagai temuan untuk keputusan bisnis berikutnya.
+
+---
+
+## 2026-09-22 (lanjutan 2) — Claude Sonnet 5
+
+### Tugas
+Pengguna melaporkan: peringatan "sudah 100 porsi, panggil karyawan" kurang jelas terbaca — saat modal "Kirim Pesanan"/konfirmasi pesanan terbuka, backdrop-nya blur sehingga banner peringatan di halaman belakang (ditambahkan sesi sebelumnya) tidak terbaca. Diminta tampilkan peringatan itu di dalam menu kirim/konfirmasi pesanan.
+
+### Perubahan kode
+- `src/app/order/[transactionId]/page.js` — tambah blok peringatan (ikon ⚠️, latar merah muda `#fee2e2`) di **dalam** modal "Detail Keranjang Pesanan", tepat di bawah header modal, sebelum daftar item. Muncul saat `sessionLimitReached` (pesan batas 100 porsi) atau `rateLimitSecondsLeft > 0` (pesan hitung mundur rate-limit) — keduanya sudah ada sebagai state dari sesi sebelumnya, di sini hanya dipindah/diduplikasi tampilannya ke lokasi yang tidak tertutup blur.
+
+### Kenapa desainnya begini
+- Banner yang sudah ada di halaman utama (di luar modal) tetap dipertahankan (berguna sebelum modal dibuka), peringatan baru ini murni tambahan supaya tetap terlihat **saat modal terbuka**, karena `backdropFilter: 'blur(4px)'` pada overlay modal (`page.js` sekitar baris 947-960) membuat konten di belakangnya (termasuk banner lama) jadi buram dan sulit dibaca — modal sendiri (`background: var(--card-bg)`) tidak ikut ter-blur karena berada di atas layer overlay, jadi solusinya menaruh salinan pesan di dalam kartu modal itu sendiri, bukan mengubah intensitas blur (blur sengaja dipakai untuk fokus visual ke modal).
+
+### Pengujian
+- `npx eslint "src/app/order/[transactionId]/page.js"` — dibandingkan sebelum/sesudah: hasil identik, 0 error, 2 warning pra-existing (missing dep `storageKey`, pemakaian `<img>`), tidak berkaitan dengan perubahan ini.
+- **Belum diuji di browser** — perlu buka modal kirim pesanan dalam kondisi sudah ≥100 porsi (atau sedang kena rate-limit) dan pastikan peringatan terbaca jelas tanpa terhalang blur.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual di browser untuk perubahan ini (lihat Pengujian).
+- Daftar uji manual dari sesi sebelumnya (scan QR sampai ≥100 porsi, kirim cepat berturut-turut untuk rate-limit, tab A/B dengan requestId sama) masih belum dijalankan — lihat entri "2026-09-22 (lanjutan)" di atas.
+
+---
+
+## 2026-09-22 (lanjutan 3) — Claude Sonnet 5
+
+### Tugas
+Pengguna masih melihat masalah yang sama: saat modal "Detail Keranjang Pesanan" terbuka, halaman di belakangnya blur sehingga peringatan "sudah lebih dari 100 porsi" tidak terbaca. Diminta 3 hal:
+1. Tampilkan pesan error "sudah lebih dari 100 porsi" di dalam tampilan detail keranjang pesanan.
+2. Hapus teks hint statis "Maksimal 10 porsi per menu, 30 porsi per kiriman, 100 porsi per sesi, dan 5 kiriman per menit. Pesanan lebih besar: hubungi kasir." dari halaman pesanan customer.
+3. Fitur baru: kalau customer sudah memesan (kumulatif) lebih dari 30 porsi, tampilkan pesan bahwa untuk pesanan lebih banyak lagi bisa panggil kasir.
+
+### Root cause #1 (kenapa perbaikan sesi sebelumnya belum cukup)
+Sesi sebelumnya ("2026-09-22 (lanjutan 2)") sudah menambah blok peringatan di dalam modal, tapi kondisinya hanya `sessionLimitReached || rateLimitSecondsLeft > 0` — dua nilai yang dihitung **client-side** dari data `transaction.orders` yang sudah dikonfirmasi server. Skenario paling umum yang dilaporkan pengguna: total pesanan customer sebelum submit masih < 100 (jadi `sessionLimitReached` masih `false`, modal tidak menampilkan apa-apa), lalu begitu klik "Kirim Pesanan Sekarang" barulah server menolak dengan `409 SESSION_LIMIT` (karena ditambah isi keranjang jadi ≥100). Penolakan itu ditangkap dan disimpan ke state `submitMessage` — tapi `submitMessage` **hanya dirender di halaman utama** (di belakang modal), bukan di dalam modal. Karena modal tidak otomatis tertutup saat submit ditolak, pengguna tetap melihat modal blur tanpa pesan error apa pun. Ini baru ketahuan setelah menelusuri ulang alur `submitOrder()` — pada sesi sebelumnya saya keliru asumsikan `sessionLimitReached` sudah cukup untuk menutup semua kasus.
+
+### Perubahan kode
+- `src/app/order/[transactionId]/page.js`:
+  - Blok peringatan merah di dalam modal "Detail Keranjang Pesanan" sekarang juga memeriksa `submitMessage` (selain `sessionLimitReached` dan `rateLimitSecondsLeft`) — jadi begitu server menolak submit dengan alasan apa pun (termasuk `SESSION_LIMIT` "Pesanan sudah melewati 100 porsi..."), pesannya langsung terlihat di dalam modal, bukan hanya di halaman belakang yang blur.
+  - Hapus baris `<p role="status">Maksimal ... porsi per menu, ... per sesi, dan ... kiriman per menit.</p>` dari halaman menu utama (permintaan #2).
+  - Tambah `bigOrderNotice` (derived: total porsi kumulatif > `ORDER_LIMITS.perSubmission` (30) dan belum menyentuh `sessionLimitReached`) — menampilkan pesan kuning informasional "Anda sudah memesan lebih dari 30 porsi. Jika ingin memesan lebih banyak lagi, silakan panggil kasir." Ini **bukan** blokir (tombol tetap aktif, cuma pemberitahuan) — beda dari batas 100 porsi yang benar-benar mengunci. Ditampilkan baik di halaman menu utama maupun di dalam modal keranjang (sebelum submitMessage/sessionLimitReached/rate-limit mengambil alih ruang peringatan, supaya tidak dobel pesan).
+  - Threshold 30 sengaja pakai `ORDER_LIMITS.perSubmission` yang sudah ada (bukan angka baru terpisah) — kebetulan sama-sama 30 porsi dan supaya tetap satu sumber kebenaran kalau batas per-kiriman berubah di masa depan.
+
+### Kenapa desainnya begini
+- **Tidak menutup modal otomatis saat ditolak** — dibiarkan seperti perilaku lama (modal tetap terbuka setelah rejection) supaya customer bisa langsung lihat isi keranjangnya dan pesan errornya sekaligus, tanpa harus buka-tutup modal lagi.
+- **`bigOrderNotice` murni informasional, tidak mengunci apa pun** — beda dari `sessionLimitReached` (≥100 porsi, mengunci total) sesuai permintaan eksplisit pengguna: "tampilkan pesan jika ingin memesan lebih dari 30 porsi bisa memanggil kasir", bukan "blokir di atas 30 porsi". Customer tetap bisa lanjut memesan sampai batas keras 100 porsi.
+- **Hint teks lama dihapus total, tidak diganti hint lain yang selalu tampil** — sesuai permintaan eksplisit #2. Informasi batas sekarang hanya muncul kontekstual (saat relevan: lebih dari 30 porsi, kena rate-limit, atau sudah capai 100 porsi), bukan selalu terpampang di atas menu.
+
+### Pengujian
+- `npx eslint "src/app/order/[transactionId]/page.js"` — dibandingkan sebelum/sesudah: hasil identik, 0 error, 2 warning pra-existing (missing dep `storageKey`, pemakaian `<img>`), tidak berkaitan dengan perubahan ini.
+- **Belum diuji di browser** — perlu dicoba: (a) buka modal keranjang dengan total pesanan sudah di atas 30 tapi di bawah 100, pastikan pesan kuning informasional muncul; (b) isi cart yang kalau ditambah ke total confirmed akan ≥100, klik "Kirim Pesanan Sekarang", pastikan pesan merah "Pesanan sudah melewati 100 porsi..." langsung terlihat DI DALAM modal (bukan cuma di halaman belakang); (c) pastikan hint lama "Maksimal 10 porsi per menu..." sudah tidak muncul lagi di halaman manapun.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual browser untuk 3 perubahan di atas (lihat Pengujian).
+- Semua daftar uji manual dari 2 entri sebelumnya (2026-09-22 lanjutan & lanjutan 2) masih tertunda — belum ada satupun perubahan customer-order sesi hari ini yang diverifikasi lewat klik nyata di browser, baru lewat baca kode + lint + (untuk perbaikan race condition) uji HTTP otomatis.
+
+---
+
+## 2026-09-22 (lanjutan 4) — Claude Sonnet 5
+
+### Tugas
+Koreksi dari pengguna atas fitur notice ">30 porsi" (ditambahkan sesi "lanjutan 3"):
+1. Bug: di modal "Detail Keranjang Pesanan", saat total pesanan tepat menyentuh angka 30, notice tidak muncul. Diminta jadi `>=30` (bukan `>30`).
+2. Konfirmasi: saat sudah ≥100 porsi, notice 30-porsi harus hilang dan cuma notice 100-porsi yang tampil — desain tampilan modal untuk kasus 100-porsi **jangan diubah**, sudah dianggap benar oleh pengguna.
+3. Fitur baru: peringatan (30-porsi maupun 100-porsi, sesuai aturan #1 & #2) juga harus muncul di layar "Pesanan Berhasil Terkirim!" (layar setelah submit sukses, yang punya tombol "Pesan Menu Tambahan") — sebelumnya layar itu cuma menampilkan peringatan 100-porsi, belum ada peringatan 30-porsi.
+
+### Root cause bug #1
+`bigOrderNotice` di sesi sebelumnya memakai `getAggregatedTotalItemCount() > ORDER_LIMITS.perSubmission` (strictly greater than 30) — jadi tepat di angka 30 kondisinya masih `false`, baru muncul di porsi ke-31. Ini salah ketik ambang batas, seharusnya `>=` sesuai maksud fitur ("begitu menyentuh 30, sudah waktunya diingatkan").
+
+### Perubahan kode
+- `src/app/order/[transactionId]/page.js`:
+  - `bigOrderNotice`: operator diubah dari `>` jadi `>=` — sekarang trigger tepat di porsi ke-30, bukan ke-31. Variabel ini dipakai di 3 tempat (banner halaman menu utama, modal keranjang, layar sukses) sehingga satu perbaikan berlaku konsisten di semuanya.
+  - Teks notice disesuaikan dari "Anda sudah memesan **lebih dari** 30 porsi" jadi "Anda sudah memesan 30 porsi **atau lebih**" — supaya tetap akurat sekarang trigger-nya `>=` (di porsi tepat 30, "lebih dari 30" secara harfiah salah).
+  - Mutual exclusivity 30 vs 100 **tidak perlu kode tambahan** — `bigOrderNotice` dari awal sudah didefinisikan sebagai `!sessionLimitReached && total >= 30`, jadi begitu `sessionLimitReached` (≥100) jadi `true`, `bigOrderNotice` otomatis `false` di semua tempat yang memakainya. Ini sudah memenuhi permintaan #2 tanpa perubahan lain.
+  - Tambah blok peringatan `bigOrderNotice` (kuning, sama seperti di halaman menu utama) di layar "Pesanan Berhasil Terkirim!" — ditaruh persis sebelum tombol "Pesan Menu Tambahan", sejajar dengan blok `sessionLimitReached` (merah) yang sudah ada di situ sejak sesi "lanjutan". Sama-sama dibungkus kondisi `['open','ordered'].includes(transaction?.status)` supaya tidak tampil kalau sesi sudah ditutup.
+  - Blok peringatan di dalam modal keranjang (yang menurut pengguna "udah bagus") **tidak disentuh sama sekali** kecuali otomatis ikut kena perbaikan `>=`/teks di atas (karena pakai variabel & teks yang sama) — sesuai permintaan eksplisit "jangan ganti itu".
+
+### Pengujian
+- `npx eslint "src/app/order/[transactionId]/page.js"` — dibandingkan sebelum/sesudah: hasil identik, 0 error, 2 warning pra-existing, tidak berkaitan dengan perubahan ini.
+- **Belum diuji di browser** — perlu dicoba: (a) total pesanan tepat 30 porsi → notice kuning harus muncul (sebelumnya baru muncul di 31); (b) total ≥100 porsi → notice kuning hilang, hanya notice merah 100-porsi yang tampil, baik di halaman menu maupun di layar "Pesanan Berhasil Terkirim!"; (c) di layar sukses dengan total 30-99 porsi → notice kuning baru muncul di situ (fitur baru).
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual browser untuk perubahan ini (lihat Pengujian).
+- Semua daftar uji manual dari entri-entri sebelumnya hari ini (2026-09-22 dan lanjutannya) masih tertunda — belum ada satupun perubahan customer-order hari ini yang diverifikasi lewat klik nyata di browser.
+
+---
+
+## 2026-09-22 (lanjutan 5) — Claude Sonnet 5
+
+### Tugas
+Pengguna minta audit alur "meja dibuat → customer pesan → bayar → sesi ditutup", khusus memastikan 4 hal di tampilan customer setelah sesi ditutup (kalau QR meja itu dipakai lagi untuk memesan): (1) halaman tidak bisa akses/ubah data sistem, (2) tidak ada tombol yang disembunyikan (tetap ada tapi tersamar), (3) halaman hanya menampilkan pemberitahuan sesi ditutup, (4) tidak ada fungsi yang masih bisa mengakses server/data restoran.
+
+### Metode
+Baca kode `src/app/order/[transactionId]/page.js` (alur render & state customer), `src/app/api/transaction/[id]/route.js` (GET publik yang dipakai halaman customer, PUT pembayaran), `src/app/api/order/route.js` (validasi `SESSION_CLOSED`). Tidak menjalankan browser (CLI-only), murni audit statis + perbaikan berdasarkan pembacaan kode.
+
+### Temuan (dibuktikan lewat baca kode, bukan dugaan)
+
+**AMAN — skenario "scan ulang QR lama SETELAH sesi ditutup" (fresh page load):**
+- `page.js:62-68` (fungsi `fetchData`, dijalankan sekali saat halaman pertama dibuka): kalau `trxData.status` bukan `'open'`/`'ordered'`, langsung `setError('Transaksi ini sudah selesai.')`.
+- Render `if (error) return (...)` (sebelum perubahan sesi ini di baris ~344) menampilkan **hanya** kartu teks statis "Transaksi ini sudah selesai. Silakan hubungi kasir untuk mendapatkan QR Code baru." — **tidak ada satu pun tombol**, tidak ada `fetch()` lain yang dipicu dari blok ini. Memenuhi syarat #1-4 pengguna untuk skenario ini.
+- `GET /api/transaction/[id]` (endpoint publik yang dipakai) untuk viewer non-staff hanya mengembalikan field terbatas milik transaksi itu sendiri (`id, tableNumber, status, createdAt, completedAt, total, orders[].items` tanpa nama staf/kasir, tanpa data transaksi lain) — bukan "data restoran" dalam arti data internal/rahasia, dan ID transaksi pakai `cuid()` (tidak berurutan/tidak bisa ditebak), jadi tidak bisa dipakai mengintip transaksi lain.
+
+**TERBUKTI, BUG — transisi sesi ke "ditutup" SAAT tab customer masih terbuka (bukan fresh load):**
+- Kalau customer sedang di layar menu (browsing) atau layar "Pesanan Berhasil Terkirim!" saat kasir menyelesaikan pembayaran, polling status tiap 5 detik (`page.js:105-119`, versi sebelum perubahan) meng-update `transaction.status` tapi **tidak ada logika sama sekali** yang memindahkan tampilan ke layar "sesi ditutup". Yang muncul cuma banner kecil "Sesi sudah ditutup" (`page.js:520` versi lama) sementara seluruh menu, tombol tambah ke keranjang, dan modal "Detail Keranjang Pesanan" **tetap tampil dan bisa diklik** — melanggar syarat #2 dan #3.
+- `updateCart` (`page.js:170`, versi lama) tidak mengecek status transaksi sama sekali — customer masih bisa menambah item ke keranjang meski sesi sudah ditutup (pelanggaran ringan terhadap syarat #4, walau tidak bisa menghasilkan order baru karena `submitOrder`/server tetap menolak).
+- Polling (`refreshStatus`) tidak pernah berhenti — tetap mengirim `GET /api/transaction/[id]` tiap 5 detik selamanya selama tab terbuka, bahkan lama setelah sesi ditutup. Read-only dan datanya tidak sensitif (lihat poin di atas), tapi tetap "mengakses server" tanpa alasan setelah sesi final — pelanggaran halus terhadap syarat #4.
+- Penulisan data (order baru) sendiri **sudah aman** — server (`api/order/route.js:67-69`) selalu menolak dengan `SESSION_CLOSED` (409) untuk transaksi yang statusnya bukan `open`/`ordered`, jadi tidak ada risiko data pesanan/pembayaran berubah. Temuan di atas murni soal UI yang masih terasa "hidup" padahal seharusnya mati total begitu ditutup, sesuai permintaan eksplisit pengguna.
+
+### Perubahan kode
+- `src/app/order/[transactionId]/page.js`:
+  - Tambah `closedRef` (ref, bukan state) + `useEffect` yang menandai `closedRef.current = true` begitu `transaction.status` (hasil polling) bukan `'open'`/`'ordered'`.
+  - Tambah `sessionClosedMidView` — nilai turunan (dihitung langsung saat render dari `transaction`, BUKAN lewat `setState` di dalam efek, supaya tidak kena lint `react-hooks/set-state-in-effect` yang sudah beberapa kali muncul di sesi-sesi lain hari ini) — `true` kalau `transaction` sudah ada dan statusnya bukan `open`/`ordered`, dan belum ada `error` lain yang lebih spesifik.
+  - `if (error) return (...)` diubah jadi `if (error || sessionClosedMidView) return (...)`, teks judul jadi `{error || 'Transaksi ini sudah selesai.'}` — begitu status berubah jadi tertutup (baik dari fresh load maupun polling saat tab terbuka), layar SELALU berpindah ke kartu minimal yang sama: hanya teks, tanpa tombol, tanpa aksi apa pun. Ini satu-satunya kartu "sesi ditutup" di seluruh halaman (tidak dibuat versi kedua), supaya perilakunya konsisten di kedua skenario.
+  - `refreshStatus`/interval polling: skip fetch dan `clearInterval` begitu `closedRef.current` true — polling benar-benar berhenti total begitu sesi diketahui tertutup, bukan cuma berhenti mengubah UI.
+  - `updateCart`: tambah `|| closedRef.current` ke kondisi penolakan — menutup celah race ≤5 detik antara sesi ditutup di server dan polling berikutnya mendeteksinya (defense-in-depth; begitu `sessionClosedMidView` aktif, seluruh layar menu di-unmount jadi ini jaring pengaman untuk jendela waktu sempit sebelum itu terjadi).
+
+### Kenapa desainnya begini
+- **Satu kartu "sesi ditutup", dipakai ulang untuk kedua skenario** (bukan bikin komponen/kartu terpisah untuk kasus "ditutup saat tab terbuka") — supaya tidak ada 2 versi UI yang bisa berbeda perilaku/tampilan seiring waktu; juga otomatis mewarisi properti "tanpa tombol, tanpa fetch" yang sudah terbukti aman dari skenario fresh-load.
+- **`sessionClosedMidView` dihitung saat render (bukan `setState` di efek)** — pola yang sama dipakai berulang kali di sesi-sesi hari ini (`rateLimitSecondsLeft`, dst.) setelah linter proyek ini (`react-hooks/set-state-in-effect`, bagian dari toolchain Next.js versi ini — lihat catatan header CLAUDE.md soal Next.js custom) berulang kali menolak pola `setState` langsung di badan efek karena berisiko cascading render. `closedRef` (ref, bukan state) dipertahankan karena tetap dibutuhkan oleh kode IMPERATIF di luar render (loop `setInterval`, handler `updateCart`) yang tidak bisa membaca derived-value React biasa.
+- **Tidak menyentuh endpoint `GET /api/transaction/[id]`** — datanya sudah terbukti aman untuk viewer publik (field terbatas, ID tidak bisa ditebak), jadi tidak ada perubahan server yang diperlukan untuk memenuhi 4 syarat pengguna; semua perbaikan cukup di sisi client.
+- **Tidak mengubah prioritas layar `pendingOrder`** (tetap dicek sebelum `error`/`sessionClosedMidView` di urutan render) — sengaja dibiarkan, karena ini melindungi pesanan customer sendiri yang mungkin sebenarnya sudah berhasil tersimpan di server tapi responsnya belum sampai ke browser; alur retry di layar itu akan otomatis selesai sendiri (dapat 200 kalau order itu ternyata sukses, atau dapat `SESSION_CLOSED` 409 dan keluar dari status pending) dalam hitungan detik begitu ada jawaban pasti dari server — dianalisis sebagai jendela sempit yang self-healing, bukan celah permanen, jadi tidak diutak-atik supaya tidak mengorbankan jaminan "pesanan tidak hilang" yang sudah ada.
+
+### Pengujian
+- `npx eslint "src/app/order/[transactionId]/page.js"` — dibandingkan sebelum/sesudah: hasil identik, 0 error, 2 warning pra-existing (missing dep `storageKey`, pemakaian `<img>`), tidak berkaitan dengan perubahan ini. Sempat kena error linter `react-hooks/set-state-in-effect` di percobaan pertama (`setError` langsung di badan efek) — diperbaiki dengan pola derived-value seperti dijelaskan di atas, lint bersih setelahnya.
+- **Belum diuji di browser** — perlu dicoba nyata: (a) buka halaman customer di 1 tab, biarkan tetap terbuka di layar menu; di tab/perangkat lain (kasir) selesaikan pembayaran meja itu; pastikan dalam ≤5 detik tab customer otomatis berpindah ke kartu "Transaksi ini sudah selesai." tanpa tombol apa pun; (b) ulangi skenario yang sama tapi tab customer sedang di layar "Pesanan Berhasil Terkirim!"; (c) setelah kartu itu muncul, cek tab Network browser — pastikan tidak ada lagi request `GET /api/transaction/...` berulang setiap 5 detik (polling benar-benar berhenti); (d) scan ulang QR code meja yang sudah closed dari awal (fresh load) — pastikan tetap seperti sebelumnya (sudah dikonfirmasi aman lewat baca kode, tinggal verifikasi visual).
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Uji manual browser untuk 4 skenario di atas (lihat Pengujian) — ini murni perubahan client, belum ada satu pun yang diverifikasi lewat interaksi nyata karena sesi ini CLI-only.
+- Di luar scope permintaan hari ini tapi relevan untuk didiskusikan ke depan (tidak diubah sengaja): jendela retry `pendingOrder` yang self-healing (lihat "Kenapa desainnya begini" di atas) — kalau pengguna mau perilaku itu diperketat juga (mis. langsung berhenti retry begitu polling mendeteksi sesi tertutup, bukan menunggu 1 siklus retry lagi), perlu didiskusikan dulu karena berisiko membuat pesanan yang sebenarnya sukses jadi tidak pernah dikonfirmasi ke customer.
+- Semua daftar uji manual dari entri-entri sebelumnya hari ini (soal batas 100/30 porsi, rate-limit, requestId tab ganda) masih tertunda juga — belum satupun perubahan customer-order hari ini yang diverifikasi lewat klik nyata di browser.
