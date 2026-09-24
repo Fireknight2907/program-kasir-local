@@ -12,7 +12,7 @@ for (const status of ['completed', 'cancelled']) {
     const response = await app.send();
     assert.equal(response.status, 409);
     assert.equal(response.body.code, 'SESSION_CLOSED');
-    assert.deepEqual(app.state(), { sessions, orders: [] });
+    assert.deepEqual(app.state(), { sessions, orders: [], receipts: [] });
     assert.equal((await app.send('new')).status, 200);
     assert.equal(app.state().sessions[1].total, 20000);
     assert.equal(app.state().sessions[0].status, status);
@@ -36,7 +36,7 @@ test('failed item save rolls back session total and status', async () => {
   const sessions = [{ id: 'old', status: 'open', completedAt: null, total: 0 }];
   const app = setup(sessions, true);
   assert.equal((await app.send()).status, 500);
-  assert.deepEqual(app.state(), { sessions, orders: [] });
+  assert.deepEqual(app.state(), { sessions, orders: [], receipts: [] });
 });
 
 for (const price of [1, 0, -1000, 999999, undefined]) test('uses database price instead of browser price ' + price, async () => {

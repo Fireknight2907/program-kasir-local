@@ -995,3 +995,44 @@ Pengguna minta audit umum: "ada bug/error apa lagi yang ada dalam sistem". Dimin
 - **Prioritas berikutnya (dikonfirmasi pengguna)**: pengguna sudah pilih memperbaiki temuan #1 (race condition pembayaran) lebih dulu — **sudah dikerjakan sesi ini**, lihat di atas. Item #2, #3, #4 masih menunggu keputusan pengguna soal urutan berikutnya.
 - **Perlu diuji nyata**: simulasikan 2 request bersamaan (submit order + PUT pembayaran untuk transaksi yang sama, timing berdekatan) di database `kasir_local` untuk membuktikan perbaikan #1 benar-benar menutup race-nya — belum dilakukan sesi ini karena keterbatasan akses (lihat bagian Pengujian).
 - Item #2 (statistik) siap dikerjakan kapan saja pengguna minta — sudah jelas lokasinya, tidak perlu keputusan bisnis, cuma butuh waktu implementasi + testing manual di browser (bandingkan angka sebelum/sesudah hapus 1 item).
+
+---
+
+## 2026-09-25 — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+Buat dan jalankan test untuk skenario: 2 submission dengan `requestId` IDENTIK, meja sama, menu sama, quantity sama — cek apakah sistem membuat 2 order atau membuatkan order untuk submission pertama lalu MENGEMBALIKAN (echo) respons yang sama untuk submission kedua, dan apakah tercatat 1 atau 2 pesanan.
+
+### Temuan penting: seluruh `tests/order-retry.test.cjs` (dan test lain yang pakai `tests/helpers/order-api.cjs`) TERNYATA SUDAH RUSAK sejak Rev 5.4
+- Lokasi: `tests/helpers/order-api.cjs`. Mock Prisma di helper ini dibuat sebelum `ec35c98` ("Rev 5.4: optimize order backend transaction...") menambah 2 hal baru di `src/app/api/order/route.js`:
+  1. `export const dynamic`/`export const maxDuration` di baris 6-7 — regex helper lama cuma strip `export async function POST`, bukan `export const ...`, jadi `vm.runInContext` gagal `SyntaxError: Unexpected token 'export'` untuk SEMUA test yang lewat helper ini.
+  2. Route sekarang membaca `prisma.orderSubmission.findUnique`, `prisma.transaction.findUnique`, `prisma.menuItem.findMany` **di luar** `$transaction` (fast idempotency check + pre-flight, baris 49/62-65) — helper lama cuma menyediakan method-method itu DI DALAM `tx` (di dalam `$transaction`), jadi begitu regex di atas diperbaiki, error berikutnya adalah `Cannot read properties of undefined (reading 'findUnique')`.
+- Dampak: `node --test tests/order-retry.test.cjs` (disebut di `docs/order-reliability.md` baris 18 sebagai bagian dari uji wajib) **gagal 100% (10/10 test fail)** sejak beberapa revisi lalu, kemungkinan tidak disadari karena tidak ada yang menjalankannya ulang setelah Rev 5.4.
+- Sudah diverifikasi dengan `git stash` bahwa kegagalan ini ADA SEBELUM sesi ini dimulai (bukan disebabkan perubahan saya).
+
+### Perbaikan yang dilakukan
+- `tests/helpers/order-api.cjs`:
+  - Regex strip export digeneralisasi: `export (const|async function)` → cocok untuk semua deklarasi export baru di route.js.
+  - Ditambah objek `prisma` level-atas (`prisma.transaction.findUnique`, `prisma.menuItem.findMany`, `prisma.orderSubmission.findUnique`) yang membaca dari `state` (data TERKOMIT), memisahkannya dari `draft` (data di dalam transaksi) — supaya perilaku mock cocok dengan Postgres asli: baca di luar lock tidak boleh melihat transaksi lain yang belum commit.
+  - `tx.$executeRaw` (advisory lock) ditambahkan sebagai titik SERIALISASI di mock (sebelumnya titik serialisasi keliru ada di `tx.transaction.updateMany`, padahal di kode asli lock diambil SEBELUM `doubleCheck` idempotency, bukan sebelum row-lock). Snapshot `draft = structuredClone(state)` dipindah ke `$executeRaw` supaya urutan baca-tulis mock sama persis dengan urutan di `route.js`.
+  - `tx.orderSubmission.count` (API lama) diganti `tx.orderSubmission.findMany` (API baru — rate limit sekarang pakai daftar timestamp untuk hitung `retryAfterMs`, bukan cuma count).
+  - `state()` sekarang ikut mengembalikan `receipts` (catatan `OrderSubmission`) supaya test bisa memverifikasi jumlah PESANAN TERCATAT, bukan cuma jumlah order.
+- `tests/order-session.test.cjs`: 2 assertion `deepEqual(app.state(), {sessions, orders:[]})` disesuaikan jadi `{sessions, orders:[], receipts:[]}` mengikuti shape baru `state()` — bukan perubahan perilaku, murni ikut shape.
+- **File baru `tests/order-duplicate-requestid.test.cjs`** — test spesifik sesuai permintaan pengguna hari ini.
+
+### Jawaban untuk pertanyaan pengguna (TERBUKTI lewat eksekusi test, bukan dugaan)
+Skenario: kirim 2x ke meja yang sama, `requestId` SAMA PERSIS (`duplicate-request-id-0001`), menu & quantity sama (`menuItemId:1, quantity:3`), BERURUTAN (bukan race/bersamaan).
+- **Sistem TIDAK membuat 2 order.** Submission kedua tidak memicu tulis baru sama sekali — ia mengembalikan (echo) response order dari submission PERTAMA (body & `id` identik, HTTP 200 untuk keduanya).
+- **Hanya 1 pesanan (Order) yang tercatat** — `orders.length === 1` setelah 2x kirim.
+- **Hanya 1 catatan `OrderSubmission` (receipt)** tersimpan walau ada 2 kali pengiriman — receipt kedua tidak dibuat karena idempotency check (`prisma.orderSubmission.findUnique` di baris 49 `route.js`) menemukan `requestId` yang sama dan langsung `return NextResponse.json(previous.response)` tanpa masuk ke `$transaction` sama sekali.
+- Tagihan meja (`transaction.total`) juga hanya bertambah SEKALI (3 porsi, bukan 6) — tidak dobel charge.
+- Ini konsisten dengan aturan yang sudah didokumentasikan di `docs/order-reliability.md` baris 6: "Pengiriman wajib memakai requestId; retry memakai ID dan isi yang sama. Replay tidak menambah order atau total."
+
+### Pengujian
+- `node --test tests/order-duplicate-requestid.test.cjs` — **PASS**.
+- `node --test tests/order-session.test.cjs tests/order-retry.test.cjs tests/edit-order.test.cjs tests/payment-auth.test.cjs tests/order-duplicate-requestid.test.cjs` — **70/71 PASS**. Satu kegagalan (`edit-order.test.cjs`: "empty replacement removes items and resets total") **TIDAK terkait** perubahan sesi ini — dikonfirmasi via `git stash` bahwa test itu SUDAH gagal sebelum sesi ini dimulai, dengan mock helper `edit-order` yang TERPISAH dari `order-api.cjs` (belum diselidiki root cause-nya sesi ini).
+- Tidak menjalankan terhadap database `kasir_local` sungguhan (Postgres) — memakai mock Prisma in-memory yang kini sudah disinkronkan ulang dengan pemanggilan Prisma aktual di `route.js` (diverifikasi manual baris demi baris). Untuk keyakinan lebih tinggi (menutup kemungkinan drift mock di masa depan), sebaiknya sesekali jalankan `tests/order-concurrency-local.cjs` (pakai Postgres disposable asli) yang sudah ada di repo.
+
+### Pekerjaan belum selesai / langkah berikutnya
+- **BARU, belum diselidiki**: `tests/edit-order.test.cjs` — "empty replacement removes items and resets total" gagal (`actual 1 !== expected 0`). Root cause belum dicari sesi ini (di luar scope permintaan pengguna hari ini). Perlu investigasi terpisah — kemungkinan drift serupa antara mock helper edit-order dan `edit-order/route.js` asli.
+- Item lama dari sesi-sesi sebelumnya (statistik soft-delete, kitchenStatus reset saat edit, dsb.) — lihat entri di atas, belum disentuh sesi ini.
