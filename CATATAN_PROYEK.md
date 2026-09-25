@@ -1036,3 +1036,162 @@ Skenario: kirim 2x ke meja yang sama, `requestId` SAMA PERSIS (`duplicate-reques
 ### Pekerjaan belum selesai / langkah berikutnya
 - **BARU, belum diselidiki**: `tests/edit-order.test.cjs` — "empty replacement removes items and resets total" gagal (`actual 1 !== expected 0`). Root cause belum dicari sesi ini (di luar scope permintaan pengguna hari ini). Perlu investigasi terpisah — kemungkinan drift serupa antara mock helper edit-order dan `edit-order/route.js` asli.
 - Item lama dari sesi-sesi sebelumnya (statistik soft-delete, kitchenStatus reset saat edit, dsb.) — lihat entri di atas, belum disentuh sesi ini.
+
+---
+
+## 2026-09-25 (lanjutan) — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+Permintaan lanjutan (masih tanggal sama): buat test skenario yang SAMA seperti sebelumnya (requestId identik, menu & quantity sama, 2x kirim) tapi kali ini dengan syarat eksplisit **tunggu sampai order pertama benar-benar tercatat ke DB** baru kirim order kedua — dan pastikan sistem mengembalikan order yang sudah tercatat.
+
+### Kenapa dibuat test baru (bukan reuse `order-duplicate-requestid.test.cjs`)
+Test sesi sebelumnya (`tests/order-duplicate-requestid.test.cjs`) secara LOGIKA sudah persis skenario ini (2 kiriman berurutan, requestId sama → order kedua di-echo), TAPI jalan di atas mock Prisma in-memory (`tests/helpers/order-api.cjs`), bukan database sungguhan. Permintaan pengguna hari ini eksplisit menyebut "tercatat ke dalam DB", jadi dibuatkan test baru yang benar-benar menulis ke PostgreSQL asli lewat `route.js` yang tidak dimodifikasi — supaya buktinya bukan cuma "mock berkata begitu".
+
+### Perubahan kode
+- **File baru `tests/order-sequential-duplicate-local.cjs`** — harness HTTP yang menjalankan `src/app/api/order/route.js` ASLI (tanpa diubah) dengan Prisma Client sungguhan, mengikuti pola yang sudah ada di `tests/order-concurrency-local.cjs` (butuh PostgreSQL disposable via env var, di sini `SEQDUP_DATABASE_URL`, bukan `.env` project). Alurnya:
+  1. Buat 1 baris `Transaction` (meja) + 1 `MenuItem` dummy.
+  2. Kirim order pertama (`POST /api/order`), TUNGGU respons selesai.
+  3. **Query LANGSUNG ke tabel `Order`/`OrderSubmission`/`Transaction`** (bukan cuma percaya body respons HTTP) untuk memastikan order pertama benar-benar tercatat di database sebelum lanjut.
+  4. Baru kirim order kedua dengan `requestId`, meja, menu, quantity SAMA PERSIS.
+  5. Query ulang DB, bandingkan.
+  6. Bersihkan semua fixture test (transaction/order/orderItem/orderSubmission/menuItem) di `finally`, apa pun hasilnya.
+
+### Infrastruktur test — cluster PostgreSQL disposable baru (bukan `kasir_local`, bukan Supabase produksi)
+- Password `kasir_local` tidak tercatat di memori/sesi ini (sesuai aturan proyek), jadi dibuatkan cluster PostgreSQL 18 **sementara** sendiri via `initdb`/`pg_ctl` (binary sudah terinstal di `C:\Program Files\PostgreSQL\18\bin`, sama seperti yang dipakai sesi Codex 16 Sept untuk `order-concurrency-local.cjs`), listen di `127.0.0.1:55440`, database `kasir_seq_test`, schema di-push via `prisma db push` dengan `DATABASE_URL`/`DIRECT_URL` di-override eksplisit (bukan dari `.env`).
+- **Setelah test selesai, cluster ini DIHENTIKAN dan SEMUA filenya (data dir, log, file password) DIHAPUS** (`tmp/pgdata-seq-dup*`) — tidak ada password yang tersisa di disk maupun di catatan ini, sesuai aturan proyek "jangan simpan password". Hanya hasil test (`tmp/order-sequential-duplicate-results.json`, tidak berisi kredensial) yang disimpan sebagai bukti, konsisten dengan pola `tmp/order-concurrency-results.json` yang sudah ada di repo.
+- `.env`/Supabase produksi dan `kasir_local` **sama sekali tidak disentuh** sesi ini.
+
+### Hasil (TERBUKTI lewat eksekusi nyata ke PostgreSQL sungguhan, bukan mock, bukan dugaan)
+Dijalankan `node tests/order-sequential-duplicate-local.cjs` terhadap cluster disposable di atas:
+```
+first:  { status: 200, orderId: 3 }
+second: { status: 200, orderId: 3 }      <- id SAMA dengan order pertama
+dbAfterFirst:  { orderCount: 1, receiptCount: 1, total: 30000 }
+dbAfterSecond: { orderCount: 1, receiptCount: 1, total: 30000 }   <- TIDAK bertambah setelah kirim ke-2
+pass: true
+```
+- **Order kedua TIDAK membuat baris baru** — sistem mengembalikan (echo) order pertama yang sudah tercatat di DB (`id` sama, body sama setelah dibandingkan dengan normalisasi urutan key JSON).
+- **Baris `Order` di database tetap 1** dan **`OrderSubmission` (receipt) tetap 1** setelah 2x kirim — dikonfirmasi lewat `SELECT` langsung ke database, bukan cuma dari respons HTTP.
+- **Tagihan meja (`Transaction.total`) tetap 30.000** (3 porsi x 10.000), tidak dobel-charge.
+- Ini menguatkan (dengan bukti DB sungguhan) kesimpulan sesi sebelumnya yang masih berbasis mock, dan menutup item "langkah berikutnya" yang dicatat di entri sebelumnya ("sebaiknya sesekali jalankan test dengan Postgres disposable asli untuk keyakinan lebih tinggi").
+
+### Catatan teknis kecil (bukan bug, sempat bikin test gagal palsu)
+- Percobaan pertama sempat `pass:false` walau semua angka DB sudah benar — ternyata bandingannya (`JSON.stringify(second.body) === JSON.stringify(first.body)`) gagal murni karena URUTAN KEY JSON berbeda (order pertama = objek Prisma langsung, order kedua = hasil `JSON.parse` dari kolom `response` tersimpan di `OrderSubmission`) — BUKAN karena datanya berbeda. Diperbaiki dengan membandingkan versi JSON yang key-nya sudah diurutkan (`stableStringify`). Dicatat di sini supaya tidak disalahartikan sebagai bug aplikasi oleh AI/dev lain yang menjalankan ulang test ini.
+
+### Pengujian
+- `node --check tests/order-sequential-duplicate-local.cjs` — sintaks valid.
+- `node tests/order-sequential-duplicate-local.cjs` (2x dijalankan selama debugging) — run terakhir **PASS** (lihat hasil di atas), disimpan di `tmp/order-sequential-duplicate-results.json`.
+- Setelah test: query `SELECT count(*)` langsung ke cluster disposable mengonfirmasi 0 fixture `__seqdup_*` tersisa (cleanup `finally` bekerja) sebelum cluster dihentikan & dihapus.
+- Tidak menjalankan `npx eslint` pada file ini — pola penamaan `*-local.cjs` yang sudah ada (`order-concurrency-local.cjs`) sebelumnya juga tidak dilint sebagai bagian alur kerja normal (butuh DB live, bukan test yang jalan otomatis di CI/lint).
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Test ini **manual-run** (butuh binary PostgreSQL + `SEQDUP_DATABASE_URL` diisi tangan), belum diintegrasikan ke `docs/order-reliability.md` sebagai bagian dari alur uji wajib — bisa ditambahkan kalau pengguna mau jadikan ini rutin (sama seperti `order-concurrency-local.cjs` yang juga belum didaftarkan di sana).
+- Item lama yang masih terbuka (lihat entri-entri sebelumnya): `tests/edit-order.test.cjs` yang gagal, statistik soft-delete, kitchenStatus reset saat edit — tidak disentuh sesi ini.
+
+---
+
+## 2026-09-25 (lanjutan 2) — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+Buat test: setelah order selesai dan sesi meja sudah ditutup, customer scan QR meja itu LAGI — pastikan balasan sistem memberi tahu meja sudah ditutup dan minta karyawan (kasir) QR baru.
+
+### Alur yang diperiksa dulu (baca kode, sebelum bikin test)
+- Customer scan QR → buka `src/app/order/[transactionId]/page.js` → `fetchData()` (baris 39-103) panggil `GET /api/transaction/[id]` TANPA cookie login (endpoint publik untuk customer, `src/app/api/transaction/[id]/route.js:5-53`).
+- Endpoint GET **tidak menolak** transaksi yang statusnya sudah `completed`/`cancelled`/`deleted` — tetap balas `200` berisi `status` transaksi apa adanya (baris 37-49, cabang non-staf).
+- Frontend yang menerjemahkan status itu jadi pesan ke customer: `page.js:62-68` — kalau `status !== 'open'` dan bukan `'ordered'`, `setError('Transaksi ini sudah selesai.')`. Lalu `page.js:361-368` merender kartu: **"Transaksi ini sudah selesai."** + **"Silakan hubungi kasir untuk mendapatkan QR Code baru."** — ini yang dilihat customer di layar.
+- Ditemukan JALUR KEDUA yang juga secara eksplisit menyuruh "minta QR baru": kalau customer (atau tab lama yang masih terbuka) tetap coba kirim order baru ke sesi yang sudah tertutup, `POST /api/order` menolak dengan `409 SESSION_CLOSED` dan pesan **"Sesi meja sudah ditutup atau tidak berlaku. Silakan minta QR Code baru kepada kasir."** (`src/app/api/order/route.js:68` dan `:104`, dicek 2x: pre-flight di luar lock dan sekali lagi di dalam transaksi terkunci).
+- Kedua jalur ini yang diuji.
+
+### Perubahan kode
+- **File baru `tests/order-closed-session-qr-scan-local.cjs`** — pola sama seperti `order-sequential-duplicate-local.cjs` sesi sebelumnya (PostgreSQL disposable via `initdb`/`pg_ctl`, bukan `kasir_local`/produksi), TAPI kali ini menjalankan DUA route asli sekaligus tanpa dimodifikasi: `src/app/api/order/route.js` (POST) dan `src/app/api/transaction/[id]/route.js` (GET).
+- Kendala teknis yang diselesaikan: `GET /api/transaction/[id]` memanggil `getSessionUser()` dari `src/lib/session.js`, yang butuh `cookies()` dari `next/headers` — API itu hanya berfungsi di dalam request context Next.js sungguhan, tidak bisa langsung dipanggil di luar `next dev`/`next start`. Karena skenario yang diuji justru customer ANONIM (tanpa cookie sama sekali), solusinya beri mock `cookies` di dalam `vm.createContext` yang selalu balas "tidak ada cookie" (`get: () => undefined`) — ini BUKAN penyederhanaan yang mengurangi keakuratan, karena itu memang persis kondisi request customer asli.
+- Sesi ditutup dengan `db.transaction.update({status:'completed', completedAt:...})` LANGSUNG ke database, bukan lewat `PUT /api/transaction/[id]` (endpoint itu butuh login staf — di luar scope "customer scan QR", yang relevan diuji di sini adalah STATE AKHIR "sesi tertutup", bukan proses staf membayarnya).
+- Ditambah pemeriksaan statis (baca isi file, bukan render React sungguhan — repo ini tidak punya infrastruktur test React/browser): pastikan `src/app/order/[transactionId]/page.js` MASIH mengandung teks "Transaksi ini sudah selesai.", "Silakan hubungi kasir untuk mendapatkan QR Code baru.", dan kondisi gate `trxData.status !== 'open'`. Ini jaring pengaman supaya kalau teks/kondisi itu suatu saat dihapus/diubah tanpa sengaja, test ini ikut gagal — TAPI ini bukan bukti visual (belum ada screenshot/browser run).
+
+### Hasil (TERBUKTI lewat eksekusi nyata ke PostgreSQL sungguhan + kode route asli, bukan dugaan)
+```
+orderPlacedFirst:      { status: 200, orderId: 1 }
+qrScanAfterClose:      { status: 200, transactionStatus: 'completed', completedAt: '...' }
+orderAttemptAfterClose:{ status: 409, code: 'SESSION_CLOSED',
+                          error: 'Sesi meja sudah ditutup atau tidak berlaku. Silakan minta QR Code baru kepada kasir.' }
+frontendTextGuard:     { hasClosedHeading: true, hasNewQrInstruction: true, hasStatusGate: true }
+pass: true
+```
+- **Scan QR meja yang sudah ditutup TIDAK error/500** — sistem tetap balas `200` dengan `status:'completed'`, itulah data yang membuat `page.js` menampilkan "Transaksi ini sudah selesai. Silakan hubungi kasir untuk mendapatkan QR Code baru." ke customer.
+- **Percobaan pesan ulang ke sesi tertutup ditolak (`409 SESSION_CLOSED`)** dengan pesan yang SECARA EKSPLISIT menyuruh "minta QR Code baru kepada kasir" — persis yang diminta pengguna.
+- Kedua balasan sistem (GET status + pesan error POST) konsisten mengarahkan customer/karyawan ke hal yang sama: minta QR baru dari kasir.
+
+### Pengujian
+- `node --check tests/order-closed-session-qr-scan-local.cjs` — sintaks valid.
+- `node tests/order-closed-session-qr-scan-local.cjs` terhadap cluster PostgreSQL disposable (`127.0.0.1:55441`, db `kasir_qrclosed_test`) — **PASS**, hasil disimpan di `tmp/order-closed-session-qr-scan-results.json`.
+- Setelah test: `SELECT count(*)` langsung ke DB mengonfirmasi 0 fixture `__qrclosed_*` tersisa (cleanup `finally` bekerja) sebelum cluster dihentikan (`pg_ctl stop`) dan SEMUA filenya dihapus (`tmp/pgdata-qrclosed*`, termasuk file password) — tidak ada kredensial tersisa di disk, sama seperti pola sesi sebelumnya.
+- `.env`/Supabase produksi dan `kasir_local` sama sekali tidak disentuh.
+- **Belum diuji di browser sungguhan** — pemeriksaan pesan frontend di sini hanya pencocokan teks di source file (`frontendTextGuard`), BUKAN screenshot/klik nyata men-scan QR meja tertutup. Kalau ingin bukti visual, perlu dicoba manual: tutup 1 meja (bayar), scan ulang QR meja itu di browser, screenshot kartu "Transaksi ini sudah selesai."
+
+### Pekerjaan belum selesai / langkah berikutnya
+- Verifikasi visual di browser (lihat poin terakhir Pengujian) belum dilakukan — opsional, tapi disarankan sebelum menganggap UX bagian ini 100% selesai diverifikasi.
+- Test ini manual-run juga (perlu isi `QRCLOSED_DATABASE_URL` tangan), belum didaftarkan di `docs/order-reliability.md`.
+- Item lama yang masih terbuka dari entri-entri sebelumnya (edit-order test gagal, statistik soft-delete, kitchenStatus reset saat edit) — tidak disentuh sesi ini.
+
+---
+
+## 2026-09-26 — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+"Apakah ada tugas atau bug yang belum gua kerjakan/perbaiki?" — diminta ditelusuri ulang seluruh catatan lalu dikonsolidasikan kembali ke file ini. Ini murni audit/rangkuman (tidak ada perubahan kode), tapi beberapa klaim lama DIVERIFIKASI ULANG terhadap kode & database sungguhan sebelum ditulis di sini — bukan sekadar menyalin catatan lama tanpa cek, sesuai aturan proyek.
+
+### Metode
+Baca seluruh `CATATAN_PROYEK.md` (1000+ baris, dari entri 2026-09-11 sampai kemarin), kumpulkan setiap butir "belum selesai/langkah berikutnya", lalu untuk item yang statusnya ambigu atau sudah lama tidak di-cross-check, diverifikasi ULANG langsung ke kode saat ini (dan satu kasus ke database produksi, read-only).
+
+### Hasil verifikasi ulang (beberapa status BERUBAH dari catatan lama)
+
+**✅ TERNYATA SUDAH SELESAI (sebelumnya berstatus "belum dikonfirmasi") — migrasi kolom soft-delete ke produksi**
+- Sejak 2026-09-14/17 catatan berulang kali menulis "belum dikonfirmasi apakah `Transaction.deletedAt`/`deletedById`/`creationRequestId` dan `OrderItem.deletedAt` sudah ada di database produksi Supabase" — tidak pernah di-cross-check ulang di catatan-catatan berikutnya.
+- **Diverifikasi hari ini** lewat query read-only `information_schema.columns` langsung ke database yang ditunjuk `.env` aktif (Supabase produksi, `aws-0-ap-southeast-1.pooler.supabase.com`): **keempat kolom itu SEMUANYA sudah ada** di tabel `Transaction`/`OrderItem` produksi. Query murni `SELECT`, tidak mengubah apa pun.
+- Item ini **tidak perlu lagi didaftarkan sebagai risiko terbuka** di catatan-catatan berikutnya.
+
+**✅ TERNYATA BUKAN BUG APLIKASI — kegagalan `tests/edit-order.test.cjs` ("empty replacement removes items and resets total")**
+- Sejak 2026-09-25 dicatat sebagai "BARU, belum diselidiki". **Diselidiki hari ini**: test ini mengharapkan `app.state().orders[0].items.length === 0` setelah semua item dihapus kasir — itu semantik HARD-delete (item benar-benar hilang dari array).
+- Tapi sejak perubahan 2026-09-17, `edit-order/route.js` sengaja diubah jadi SOFT-delete (`orderItem.update({deletedAt:new Date()})`, bukan `orderItem.delete()`) — item TETAP ada di array, cuma `deletedAt`-nya terisi. Mock Prisma di test ini (baris 23) sudah benar mengimplementasikan `update` sebagai `Object.assign` (tidak menghapus dari array) — jadi mock-nya akurat merepresentasikan kode asli; yang salah adalah ASSERTION test-nya (`items.length===0`) yang tidak diupdate mengikuti perubahan desain 17 September.
+- **Kesimpulan: `edit-order/route.js` bekerja BENAR sesuai desain soft-delete yang sudah disepakati.** Ini murni test yang butuh diperbarui assertion-nya (mis. cek item pertama punya `deletedAt` terisi & `total===0`, bukan `items.length===0`) — **tidak diperbaiki di sesi ini** (di luar scope permintaan "audit + catat", bukan perubahan kode), tapi statusnya sekarang jelas: bukan bug produksi, aman diabaikan sampai ada yang mau merapikan test-nya.
+
+**❌ MASIH BUG, DIKONFIRMASI ULANG hari ini via baca kode langsung — agregasi statistik ikut menghitung item yang sudah dihapus kasir**
+- `src/app/page.js:428` (`calculateTableStats`, dipakai tab Statistik → "Rincian Performa"/"Menu Terlaris") dan `src/app/page.js:604` (`calculateDailyRecap`, dipakai rekap harian Arsip + `exportToExcel`) — dicek ulang baris demi baris hari ini, **keduanya masih `order.items.forEach(...)` tanpa `.filter(item => !item.deletedAt)`**, persis seperti temuan 2026-09-17 yang sudah dibuktikan lewat uji fungsi sintetis (item aktif Rp10.000 + item dihapus Rp20.000 → breakdown salah tampil Rp30.000/2 item, padahal seharusnya Rp10.000/1 item).
+- Dampak: total pendapatan di card atas (`totalRevenueOverall`, sumbernya `trx.total`) **tetap benar**; yang salah HANYA breakdown detail (menu terlaris, performa per meja, rekap per jam, dan file Excel hasil export) kalau ada transaksi yang item-nya pernah dihapus kasir lewat Edit Pesanan.
+- **Ini bug paling lama yang masih terbuka di proyek ini** (pertama tercatat 2026-09-17, sudah 9 hari, sudah diverifikasi ulang statis oleh 4 sesi berbeda tanpa pernah diperbaiki) — prioritas tertinggi untuk dikerjakan berikutnya kalau pengguna setuju.
+
+**❌ MASIH BUG (fix sudah ADA di kode sejak 2026-09-24/25, tapi BELUM dibuktikan lewat eksekusi nyata) — race order vs pembayaran**
+- `src/app/api/order/route.js:101` (`tx.transaction.updateMany({...total:{increment:0}})` sebagai row-lock sebelum tulis order) — kode perbaikannya SUDAH ADA dan terverifikasi masih ada hari ini (tidak ter-revert).
+- Tapi skenario yang seharusnya dicegah (order yang nyangkut di jaringan lambat baru sukses ditulis TEPAT SETELAH kasir menyelesaikan pembayaran meja yang sama) **belum pernah direproduksi lewat eksekusi paralel nyata** — beda dari 2 test yang dibuat kemarin (duplicate requestId & closed-session QR scan) yang keduanya SEQUENTIAL, bukan race pembayaran-vs-order. Kalau mau standar pembuktian yang sama seperti perbaikan race porsi/rate-limit 2026-09-22 (`tests/order-concurrency-local.cjs`), perlu dibuatkan test serupa yang menembak `PUT /api/transaction/[id]` (pembayaran) dan `POST /api/order` ke transaksi yang sama secara bersamaan.
+
+**❌ MASIH TERBUKA, keputusan bisnis (bukan bug teknis) — belum ada jawaban dari pengguna:**
+1. Pengurangan/penghapusan item pada order yang sudah `served`/`ready` (`edit-order/route.js`) masih mereset `kitchenStatus` balik ke `queued` — sejak 2026-09-12, belum diputuskan apakah ini perilaku yang diinginkan.
+2. Definisi "Jam Paling Sibuk" (`peakHour`) — sejak 2026-09-11, masih berbasis jumlah order tiket, belum dikonfirmasi apakah sudah sesuai maksud bisnis.
+3. Apakah durasi sesi Take Away ikut dihitung di "Rata-Rata Durasi Meja Terisi" — sejak 2026-09-11, belum diputuskan.
+
+**⚠️ P2, dugaan (belum terbukti sebagai akar masalah) — deklarasi CSS `@page { size: 58mm auto; }`**
+- `src/app/globals.css:206` — dicek ulang hari ini, deklarasi ini masih persis sama. Menurut spesifikasi resmi W3C CSS Paged Media 3 (ditemukan Codex 2026-09-19), `size` seharusnya `<length>{1,2}` ATAU `auto`, bukan campuran keduanya — jadi kemungkinan browser mengabaikan deklarasi ini secara diam-diam. **Belum ada bukti bahwa ini penyebab masalah cetak fisik** (laporan cetak miring/tidak center sebelumnya sudah "diperbaiki" lewat cara lain — `left:50%`+`transform:translateX(-50%)` di `.print-qr-card`, tanpa menyentuh baris ini) — dicatat sebagai potensi technical-debt CSS, bukan bug yang terbukti berdampak.
+
+**🔒 Perlu dihapus sebelum launch (bukan bug, tapi risiko keamanan yang sudah diketahui) — kotak kredensial development di halaman login**
+- `src/app/login/page.js:138-140` — dicek ulang hari ini, **masih menampilkan** `Username: admin` / `Password: admin123` secara terbuka ke siapa pun yang membuka halaman login. Sudah dicatat sejak 2026-09-11 sebagai "wajib dihapus sebelum aplikasi launch", **masih belum dihapus**. Ini bukan bug fungsional, tapi risiko nyata kalau sampai lupa dihapus saat launch (kredensial admin bocor ke publik).
+
+**📋 Belum dieksekusi, bukan mendesak (keputusan pengguna sebelumnya: "nanti sebelum launch")**
+- Tab/menu "Kitchen" (`src/app/page.js:1644`, komponen `KitchenPanel.js`) masih ada di kode. Pengguna sudah menyatakan rencana menghapusnya sebelum launch (karena struk dapur sekarang dipicu dari dashboard kasir, bukan tab Kitchen) — belum diminta eksekusi.
+
+**🧪 Verifikasi manual/browser & printer fisik yang masih outstanding** (murni belum diuji, bukan diketahui gagal — daftar detail lengkap ada di entri masing-masing tanggal di atas):
+- Cetak fisik struk QR 58mm & struk dapur (posisi, ukuran font, tidak terpotong, ruang gantung 30mm pas atau tidak) — belum pernah diuji dengan printer thermal sungguhan sepanjang seluruh riwayat proyek ini (semua sesi sejauh ini CLI-only).
+- UI browser untuk: batas 100/30 porsi customer, countdown rate-limit, retry 2 tab dengan `requestId` sama, layar "sesi ditutup" saat tab customer masih terbuka (`sessionClosedMidView`), banner "N struk dapur menunggu dicetak" (sebagian sudah dikonfirmasi pengguna langsung, detail banner belum terpisah).
+- Verifikasi visual (screenshot) kartu "Transaksi ini sudah selesai. Silakan hubungi kasir untuk mendapatkan QR Code baru." saat scan QR meja tertutup — baru dibuktikan lewat test API otomatis kemarin, belum lewat klik nyata di browser.
+
+### Pengujian
+- Query read-only ke database produksi Supabase (`information_schema.columns`) — dijalankan, hasil di atas.
+- `node --test tests/edit-order.test.cjs` — dijalankan ulang untuk konfirmasi kegagalan masih ada & sama persis (14 pass, 1 fail, pesan error sama seperti kemarin).
+- Baca langsung `src/app/page.js` (baris 296-450, 578-615), `src/app/globals.css` (baris 203-210), `src/app/login/page.js` (baris 125-141), `src/app/api/order/route.js` (baris 94-101), `src/app/page.js` (baris 1644) — semua klaim di atas dikonfirmasi terhadap kode SAAT INI, bukan disalin mentah dari catatan lama.
+- Tidak ada kode aplikasi yang diubah sesi ini — murni audit & tulis catatan.
+
+### Pekerjaan belum selesai / langkah berikutnya (ringkasan prioritas)
+1. **Prioritas tertinggi**: perbaiki agregasi item terhapus di `calculateTableStats`/`calculateDailyRecap` (`page.js:428`/`:604`) — bug paling lama yang belum tersentuh, dampaknya ke laporan/statistik yang dilihat pengguna sehari-hari.
+2. Buat test eksekusi nyata untuk race order-vs-pembayaran (mirip `order-concurrency-local.cjs`) untuk membuktikan perbaikan row-lock 2026-09-24 benar-benar menutup celahnya.
+3. Hapus kotak kredensial development di `src/app/login/page.js` — **sebelum launch**, jangan sampai terlewat.
+4. 3 keputusan bisnis yang masih menunggu jawaban pengguna (lihat daftar di atas).
+5. Opsional/tidak mendesak: rapikan assertion `tests/edit-order.test.cjs` yang sudah usang, koreksi `@page size` CSS, hapus tab Kitchen, dan seluruh daftar verifikasi manual/printer fisik di atas.

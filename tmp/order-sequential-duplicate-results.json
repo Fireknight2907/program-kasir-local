@@ -1,0 +1,29 @@
+{
+  "scenario": "sequential duplicate requestId (wait for DB persistence before retry)",
+  "requestId": "1b714820-bfbc-43e5-8366-bb6da542874b",
+  "first": {
+    "status": 200,
+    "orderId": 3
+  },
+  "second": {
+    "status": 200,
+    "orderId": 3
+  },
+  "dbAfterFirst": {
+    "orderCount": 1,
+    "orderIds": [
+      3
+    ],
+    "receiptCount": 1,
+    "total": 30000
+  },
+  "dbAfterSecond": {
+    "orderCount": 1,
+    "orderIds": [
+      3
+    ],
+    "receiptCount": 1,
+    "total": 30000
+  },
+  "pass": true
+}

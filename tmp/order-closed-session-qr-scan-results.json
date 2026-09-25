@@ -1,0 +1,23 @@
+{
+  "scenario": "closed-session QR re-scan tells customer session is closed and to request a new QR",
+  "orderPlacedFirst": {
+    "status": 200,
+    "orderId": 1
+  },
+  "qrScanAfterClose": {
+    "status": 200,
+    "transactionStatus": "completed",
+    "completedAt": "2026-09-25T16:03:47.829Z"
+  },
+  "orderAttemptAfterClose": {
+    "status": 409,
+    "code": "SESSION_CLOSED",
+    "error": "Sesi meja sudah ditutup atau tidak berlaku. Silakan minta QR Code baru kepada kasir."
+  },
+  "frontendTextGuard": {
+    "hasClosedHeading": true,
+    "hasNewQrInstruction": true,
+    "hasStatusGate": true
+  },
+  "pass": true
+}
