@@ -1,5 +1,6 @@
 https://program-kasir-loca0l-bice.vercel.app/
 
+
 - gambar yang ditampilkan tidak akan stretch
 - saat print barcode menampilkan (barcode, tanggal, nomor meja) ✅
 - UI diperbagus

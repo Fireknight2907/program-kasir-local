@@ -1195,3 +1195,99 @@ Baca seluruh `CATATAN_PROYEK.md` (1000+ baris, dari entri 2026-09-11 sampai kema
 3. Hapus kotak kredensial development di `src/app/login/page.js` — **sebelum launch**, jangan sampai terlewat.
 4. 3 keputusan bisnis yang masih menunggu jawaban pengguna (lihat daftar di atas).
 5. Opsional/tidak mendesak: rapikan assertion `tests/edit-order.test.cjs` yang sudah usang, koreksi `@page size` CSS, hapus tab Kitchen, dan seluruh daftar verifikasi manual/printer fisik di atas.
+
+---
+
+## 2026-09-27 — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+1. Petakan seluruh actor (role) di sistem dan hak akses masing-masing — murni audit, tanpa ubah kode dulu.
+2. Cek keamanan API: apakah ada actor yang bisa memanggil API yang bukan haknya secara langsung (broken access control / privilege escalation antar role).
+
+### Metode
+- Baca `prisma/schema.prisma` (field `role` di `User`, default `KASIR`) dan `src/lib/session.js` (`requireStaff`, `requireAdmin`, `getSessionUser`).
+- Grep semua `src/app/api/**/route.js` untuk pemakaian `requireStaff`/`requireAdmin`/pengecekan `user.role` manual, lalu baca tiap file untuk memastikan URUTAN pengecekan (guard harus jalan SEBELUM baca/tulis data).
+- Cek `tests/payment-auth.test.cjs` dan `tests/trial-security.test.cjs` yang SUDAH ADA — dijalankan (`node --test`) untuk baseline: **32/32 PASS**.
+- Identifikasi celah cakupan test: yang sudah ada baru menguji "tanpa login sama sekali" atau "token dipalsukan/tidak ditandatangani" untuk sebagian besar endpoint admin-only, TAPI belum ada test dengan **session KASIR yang sah (asli, hasil `createSession()`) mencoba memanggil endpoint admin-only** — inilah skenario paling relevan dengan pertanyaan pengguna hari ini (actor sah tapi salah peran, bukan penyerang tanpa akun).
+
+### Temuan: peta actor & hak akses
+Sistem sebenarnya hanya punya **3 actor**, bukan 4 seperti asumsi awal pengguna (kasir/customer/karyawan/admin):
+- **ADMIN** (`role='ADMIN'`) — akses penuh: kelola akun staf, menu, kategori, upload gambar, hapus transaksi, lihat arsip/statistik semua tanggal, force-complete tiket dapur.
+- **KASIR** (`role='KASIR'`, default akun baru) — buka meja, proses pembayaran/pembatalan, edit pesanan, kelola antrean dapur (transisi normal), lihat transaksi aktif/hari ini saja. TIDAK bisa: kelola akun/menu/kategori/upload, hapus transaksi, lihat arsip lama, force-complete.
+- **Customer/publik** (tanpa login, akses via link QR meja) — cuma bisa `GET /api/menu`, `GET /api/categories` (sengaja publik, tanpa guard sama sekali), `GET /api/transaction/[id]` (datanya disaring, field staf disembunyikan), dan `POST /api/order`.
+- **Tidak ada role "karyawan" terpisah** di database — karyawan dapur/pramusaji memakai akun KASIR yang sama dengan akses penuh kasir. Ini sudah ditanyakan ke pengguna sebagai klarifikasi (belum dijawab per akhir sesi ini) — kalau dimaksud ada peran terbatas (mis. cuma boleh lihat dapur, tidak boleh pegang pembayaran), itu GAP DESAIN yang perlu keputusan bisnis, bukan bug.
+- Tidak ada `middleware.js` Next.js — semua proteksi dilakukan manual di tiap file route lewat `requireStaff`/`requireAdmin` dari `src/lib/session.js`. Ini berarti proteksi bergantung sepenuhnya pada disiplin developer memanggil guard di setiap route baru (tidak ada jaring pengaman terpusat).
+
+### Perubahan kode
+- **File baru `tests/rbac-cross-actor.test.cjs`** (pola sandbox sama seperti `tests/payment-auth.test.cjs` yang sudah ada: `vm.runInContext` menjalankan **route asli tanpa dimodifikasi** + `src/lib/session.js` asli, cookie session dihasilkan lewat `createSession()` sungguhan, bukan token palsu). Isinya:
+  1. Session KASIR SAH mencoba 11 kombinasi endpoint admin-only langsung: `GET/POST /api/users`, `PUT/DELETE /api/users/[id]`, `POST /api/menu`, `PUT/DELETE /api/menu/[id]`, `POST/PUT/DELETE /api/categories`, `POST /api/upload` — untuk tiap satu, assert status 401/403 **DAN** `calls.length===0` (prisma sama sekali tidak disentuh sebelum ditolak, membuktikan guard jalan paling awal, bukan cuma menyaring output setelah baca data).
+  2. Kasus yang guard-nya BUKAN lewat `requireAdmin()` biasa (pengecekan role manual/bersarang), diuji terpisah: `PUT /api/kitchen/[id]` dengan `forceServed:true` (KASIR lolos cek staf tapi ditolak cek admin bersarang), `DELETE /api/transaction/[id]` (cek `role!=='ADMIN'` manual), `GET /api/transaction?tab=archive` (parameter query dari client sengaja tidak dipercaya untuk non-admin).
+  3. Anonim (tanpa cookie sama sekali) mencoba semua endpoint di atas + `GET /api/kitchen`, `PUT /api/kitchen/[id]` (dua ini belum tercakup test lama) — semua 401, 0 akses DB.
+  4. Kontrol positif: session ADMIN SAH mencoba `POST /api/menu` dan `POST /api/categories` — **berhasil lolos guard** (status bukan 401/403, prisma DIPANGGIL) — ini penting supaya test di atas tidak cuma membuktikan "semua orang ditolak" tapi benar-benar membuktikan guard MEMBEDAKAN role.
+
+### Hasil (TERBUKTI lewat eksekusi test, bukan dugaan)
+`node --test tests/rbac-cross-actor.test.cjs tests/payment-auth.test.cjs tests/trial-security.test.cjs` → **60/60 PASS** (32 lama + 28 baru).
+- **Tidak ditemukan celah privilege escalation** pada seluruh kombinasi actor × endpoint yang diuji di atas — KASIR maupun anonim SELALU ditolak sebelum data admin-only sempat dibaca/ditulis, termasuk untuk 3 titik yang proteksinya BUKAN via helper standar `requireAdmin()` (kitchen forceServed, delete transaksi, tab arsip) — titik-titik ini justru paling rawan salah kalau ada developer baru lupa menambahkan cek, dan semuanya terbukti aman saat ini.
+- Catatan desain (BUKAN bug): `GET /api/transaction/[id]` tidak memakai `requireStaff` sama sekali (sengaja publik untuk customer), tapi KASIR yang minta transaksi arsip lama malah dapat 403 (lebih ketat daripada customer anonim yang dapat versi data tersaring). Asimetris tapi aman — customer tidak pernah dapat field milik staf.
+
+### Pengujian
+- `node --test tests/rbac-cross-actor.test.cjs` — 28/28 PASS.
+- `node --test tests/rbac-cross-actor.test.cjs tests/payment-auth.test.cjs tests/trial-security.test.cjs` — 60/60 PASS, tidak ada regresi ke test lama.
+- Tidak menyentuh database sama sekali (murni `vm` sandbox in-memory, seperti pola test lama) — `.env` produksi dan `kasir_local` tidak disentuh.
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. **Perlu jawaban pengguna**: apakah "karyawan" dimaksud sebagai role terpisah dari KASIR dengan hak lebih terbatas (misal cuma akses dapur)? Kalau ya, ini fitur baru (role ketiga), bukan perbaikan bug — perlu keputusan desain sebelum dikerjakan.
+2. Test yang dibuat hari ini baru menguji **boundary role-check** (siapa boleh masuk ke suatu route). BELUM menguji **IDOR di level data** — misal apakah satu akun KASIR bisa memengaruhi transaksi/meja yang seharusnya di luar konteksnya (perlu klarifikasi dulu apakah model bisnisnya memang "semua kasir yang sedang shift boleh pegang semua meja" — kalau iya, ini bukan IDOR).
+3. Belum audit ulang detail rate-limit/session-limit bypass dan CSRF/origin-check (`requireStaff` sudah py origin check dasar, belum diuji ulang secara aktif hari ini) — disebutkan sebagai calon putaran berikutnya kalau pengguna mau lanjut.
+4. Item-item lama dari entri sebelumnya (lihat ringkasan prioritas di atas) tidak disentuh sesi ini.
+
+---
+
+## 2026-09-30 — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+Cek RLS (Row Level Security) database: siapa saja yang bisa mengakses database, dan apakah ada actor yang bisa mengakses database di luar haknya. Murni audit, read-only, tidak boleh ubah data.
+
+### Konteks penting (ditemukan di awal audit)
+Ini BUKAN topik baru. `docs/trial-readiness.md` (audit 8–9 September 2026, belum pernah dirujuk di `CATATAN_PROYEK.md` sebelumnya) sudah mencatat **P0 kritis**: RLS nonaktif di 8 tabel produksi, role `anon` (kunci publik `NEXT_PUBLIC_SUPABASE_ANON_KEY`) punya izin SELECT/INSERT/UPDATE/DELETE penuh, dan Data API Supabase bisa diakses anonim tanpa lewat aplikasi Next.js sama sekali — artinya seluruh guard `requireStaff`/`requireAdmin` (yang diaudit terpisah sesi 2026-09-27, lihat entri di atas) bisa **dilewati total** lewat jalur Data API langsung. Draft perbaikan ada di `prisma/sql/trial-public-access-review.sql`, tercatat saat itu **"belum dijalankan"**.
+
+### Metode (semua read-only, dijalankan langsung ke database produksi Supabase via `DIRECT_URL` di `.env`, tidak ada perintah tulis)
+- `psql` query metadata: `pg_class.relrowsecurity` (status RLS per tabel), `information_schema.role_table_grants` (izin `anon`/`authenticated`), `pg_policies` (skema `public` & `storage`), `pg_roles` (apakah role koneksi Prisma bypass RLS), `storage.buckets`, `storage.objects` (hitung file per bucket, bukan isi file).
+- Verifikasi lapangan: `curl` langsung ke Supabase Data API produksi (`/rest/v1/User`, `/Transaction`, `/OrderSubmission`, `/LoginThrottle`) pakai `NEXT_PUBLIC_SUPABASE_ANON_KEY` asli, `select=id&limit=0` (tidak menarik data).
+
+### Temuan — TERBUKTI lewat eksekusi nyata (bukan dugaan)
+**Status SEKARANG (2026-09-30) berbeda dari catatan 9 September — tampaknya sudah diperbaiki:**
+1. RLS **AKTIF** (`relrowsecurity=t`) di seluruh 8 tabel aplikasi: `User, Transaction, Order, OrderItem, OrderSubmission, LoginThrottle, MenuItem, Category`. Tidak ada tabel baru yang lolos dari daftar ini (dicek ulang `pg_tables` lengkap).
+2. **Nol** izin grant ke `anon`/`authenticated` di kedelapan tabel itu (`information_schema.role_table_grants` return 0 baris) — izin sudah dicabut.
+3. **Nol** RLS policy di skema `public` (0 baris `pg_policies`). RLS aktif + tanpa policy = default-deny total untuk semua role kecuali owner/`bypassrls`. Dikombinasi dengan poin 2, tabel ini terkunci ganda untuk `anon`/`authenticated`.
+4. Dikonfirmasi via **request nyata** ke Data API produksi pakai anon key: `GET /rest/v1/User` → `401`, body `{"code":"42501","message":"permission denied for table User"}`. Sama untuk `Transaction`, `OrderSubmission`. Ini kebalikan dari temuan 9 September (saat itu `200 OK`).
+5. Storage: policy publik lama **"Izinkan upload foto menu"** (INSERT publik ke bucket `menu-images`, dicatat 9 Sept) **sudah tidak ada** — `pg_policies` skema `storage` sekarang 0 baris. `src/app/api/upload/route.js` saat ini memang sudah memakai `SUPABASE_SERVICE_ROLE_KEY` (server-only), bukan anon key lagi seperti temuan lama.
+6. Role koneksi Prisma aplikasi (`postgres`, dipakai `DATABASE_URL`/`DIRECT_URL`) punya `rolbypassrls=true` (bukan superuser) — ini **by design**: aplikasi Next.js mengandalkan guard `requireStaff`/`requireAdmin` di kode (bukan RLS) untuk kontrol akses by-role, sedangkan RLS di database adalah lapisan pertahanan terpisah khusus menutup akses publik/anonim di luar aplikasi.
+
+**Penting — perbaikan ini TIDAK tercatat di mana pun:**
+- `git log` untuk `docs/trial-readiness.md` dan `prisma/sql/trial-public-access-review.sql` cuma menunjukkan 1 commit (`68d16a8`, saat file dibuat, 2026-09-11) — tidak ada commit susulan yang menjalankan/menandai SQL itu applied.
+- Tidak ada entri di `CATATAN_PROYEK.md` sebelumnya yang menyebut RLS/policy/Data API/storage.
+- Kesimpulan: perbaikan P0 & P1 di `docs/trial-readiness.md` **sudah diterapkan di database produksi**, kemungkinan besar dijalankan manual lewat Supabase SQL editor oleh pengguna langsung, **di luar kontrol versi dan tidak didokumentasikan**. Faktanya sudah benar; hanya prosesnya yang tidak tercatat.
+
+**Temuan minor baru (bukan di 9 September):**
+- Ada bucket Storage bernama **`kasir`** (`public=true`) yang **tidak direferensikan di kode manapun** (`grep` di seluruh `src/` nihil — satu-satunya bucket yang dipakai kode adalah `menu-images`). Saat ini **kosong** (0 objek, dicek via `storage.objects` metadata, bukan isi file) jadi tidak ada eksposur data saat ini, tapi bucket publik tanpa fungsi jelas adalah permukaan risiko yang tidak perlu.
+- `.env` lokal tidak punya `SUPABASE_SERVICE_ROLE_KEY` (dicek hanya nama variabel, bukan isi) — kalau environment produksi (Vercel) juga tidak diset, endpoint upload gambar menu akan selalu balas `503` (fail-closed, bukan celah keamanan, tapi bisa bikin fitur upload rusak tanpa jelas kenapa).
+
+### Peta akses database saat ini (jawaban langsung ke pertanyaan pengguna)
+- **Aplikasi Next.js (Prisma, role `postgres`, kredensial di `.env`)** — akses penuh ke semua tabel, bypass RLS by design. Kontrol per-role (ADMIN vs KASIR) dilakukan di kode aplikasi (`requireStaff`/`requireAdmin`), sudah diaudit terpisah 2026-09-27 dan **tidak ditemukan celah** (28/28 test privilege-escalation lolos).
+- **Siapa pun yang memegang password `DATABASE_URL`/`DIRECT_URL` penuh** — akses admin penuh ke seluruh database, tidak dibatasi RLS sama sekali (karena `bypassrls`). Ini kredensial rahasia, sesuai aturan proyek tidak dicatat di sini.
+- **Publik/anonim lewat Supabase Data API atau Storage API (modal `anon key`, yang memang tersebar ke browser lewat `NEXT_PUBLIC_SUPABASE_ANON_KEY`)** — **sekarang ditolak (`403`/`permission denied`)** untuk 8 tabel aplikasi dan untuk tulis/ubah/hapus file Storage. Anon HANYA masih bisa membaca file dari 2 bucket yang ditandai publik (`menu-images` berisi 4 gambar menu, `kasir` kosong) lewat public URL Storage — ini memang tujuannya (gambar menu harus bisa ditampilkan customer tanpa login).
+- **Tidak ditemukan actor yang bisa mengakses data di luar haknya** pada pemeriksaan hari ini — baik di lapisan aplikasi (RBAC, sesi 27 Sept) maupun lapisan database (RLS, sesi ini).
+
+### Pengujian (semua dijalankan nyata terhadap produksi, murni baca — dicatat lengkap supaya bisa direproduksi)
+- `psql` 6 query metadata read-only (RLS flag, grants, policies ×2 skema, roles, buckets, object count per bucket) ke `DIRECT_URL` produksi.
+- `curl` 4 request `GET` ke Data API produksi pakai anon key asli, `limit=0` — 3 tabel sensitif kembalikan `401 permission denied`, 1 (`LoginThrottle`) kembalikan `400` karena nama kolom (`id` tidak ada di tabel itu) — bukan soal izin, tapi tetap tidak ada data yang lolos.
+- Tidak ada satu pun perintah `INSERT`/`UPDATE`/`DELETE`/DDL dijalankan sesi ini.
+
+### UPDATE (masih 2026-09-30) — Status RLS: TERBUKTI SELESAI, siapa/kapan tidak diketahui (tidak masalah)
+Pengguna tidak ingat apakah pernah mengerjakan perbaikan RLS ini. **Tidak masalah** — status "selesai" di sini tidak berdasarkan ingatan siapa pun, melainkan bukti langsung dari kondisi database & request nyata ke Data API produksi (lihat bagian Temuan di atas: RLS aktif, grant anon/authenticated dicabut, request `anon key` sungguhan ditolak `401 permission denied`). Kemungkinan besar pengguna sendiri menjalankan SQL-nya manual lewat Supabase SQL editor di luar sesi AI manapun — jejak commit/catatan memang tidak ada, tapi hasil di database sudah pasti benar. **Ditutup sebagai selesai**, tidak perlu dikerjakan ulang.
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. Putuskan nasib bucket Storage `kasir` yang tidak dipakai — hapus, atau dokumentasikan kalau memang ada rencana pemakaian.
+2. Cek apakah `SUPABASE_SERVICE_ROLE_KEY` sudah diset di environment produksi (Vercel) — kalau belum, fitur upload gambar menu admin akan gagal.
+3. Di luar scope RLS: IDOR di level data (satu akun KASIR memengaruhi transaksi di luar konteksnya) masih belum diaudit — sudah dicatat sebagai next step di sesi 2026-09-27, belum dikerjakan.
