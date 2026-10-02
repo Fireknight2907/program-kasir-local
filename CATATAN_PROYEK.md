@@ -1291,3 +1291,93 @@ Pengguna tidak ingat apakah pernah mengerjakan perbaikan RLS ini. **Tidak masala
 1. Putuskan nasib bucket Storage `kasir` yang tidak dipakai — hapus, atau dokumentasikan kalau memang ada rencana pemakaian.
 2. Cek apakah `SUPABASE_SERVICE_ROLE_KEY` sudah diset di environment produksi (Vercel) — kalau belum, fitur upload gambar menu admin akan gagal.
 3. Di luar scope RLS: IDOR di level data (satu akun KASIR memengaruhi transaksi di luar konteksnya) masih belum diaudit — sudah dicatat sebagai next step di sesi 2026-09-27, belum dikerjakan.
+
+---
+
+## 2026-10-03 — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+Pengguna lapor fitur upload gambar menu balas error `503`, minta dicek apakah gambar benar-benar tersimpan ke database atau gagal.
+
+### Temuan — TERBUKTI (dibaca langsung dari kode, dikonfirmasi lewat `.env`)
+- Root cause bukan di logika upload maupun di Supabase, melainkan guard env-check di `src/app/api/upload/route.js:15`: `if (!supabaseUrl || !supabaseKey) return 503`. Variabel `SUPABASE_SERVICE_ROLE_KEY` yang dicek kode saat itu **tidak ada** di `.env` lokal (cuma ada `NEXT_PUBLIC_SUPABASE_URL` & `NEXT_PUBLIC_SUPABASE_ANON_KEY`) — sudah diprediksi sebagai risiko di entri 2026-09-30 poin "Pekerjaan belum selesai" #2.
+- Jadi upload **tidak pernah mencoba** menyentuh Supabase Storage — berhenti di pengecekan env sebelum baris `supabase.storage.from('menu-images').upload(...)` (route.js:31) dieksekusi.
+- Sekalian dikonfirmasi ke pengguna: gambar menu memang **tidak disimpan sebagai file di database**. Yang disimpan di database (`MenuItem.image String?`, `prisma/schema.prisma:18`) cuma **URL string** hasil upload ke Supabase Storage (object storage terpisah, bucket `menu-images`) — ini pola standar (bukan bug/workaround), supaya database tetap ringan dan file bisa dilayani lewat CDN.
+- Pengguna menginformasikan: Supabase sudah mengganti format key dari `service_role` menjadi `secret_key`, dan pengguna sudah menulis key baru itu ke `.env` dengan nama variabel `SUPABASE_SECRET_KEY` (bukan `SUPABASE_SERVICE_ROLE_KEY`).
+
+### Perubahan kode
+- `src/app/api/upload/route.js:14` — ganti `process.env.SUPABASE_SERVICE_ROLE_KEY` → `process.env.SUPABASE_SECRET_KEY`, mengikuti nama variabel yang sudah ditulis pengguna di `.env` dan format key baru dari Supabase.
+
+### Keputusan penting & alasan
+- Tidak mengubah nama variabel di `.env` (tetap `SUPABASE_SECRET_KEY` sesuai yang sudah ditulis pengguna) — kode yang disesuaikan ke `.env`, bukan sebaliknya, karena `.env` sudah diisi lebih dulu oleh pengguna.
+- Referensi lama ke `SUPABASE_SERVICE_ROLE_KEY` di `docs/trial-readiness.md`, `docs/pdf-remediation-2026-09-10.md`, `tmp/audit/*` **sengaja tidak diubah** — itu dokumen/catatan historis audit lama, bukan kode yang jalan, jadi tidak memengaruhi fungsi aplikasi kalau dibiarkan menyebut nama variabel lama.
+
+### Pengujian
+- **Diverifikasi via eksekusi nyata** (operasi baca saja, tidak menulis file): script Node sekali pakai memanggil `supabase.storage.listBuckets()` pakai `SUPABASE_SECRET_KEY` dari `.env` produksi → berhasil, mengembalikan 2 bucket (`kasir`, `menu-images`). Ini membuktikan key baru valid dan `createClient` bisa autentikasi dengan format `secret_key`.
+- **Belum diuji**: upload file PNG sungguhan end-to-end lewat form admin di browser (akan menulis file nyata ke bucket produksi `menu-images`, belum dilakukan tanpa izin eksplisit lebih lanjut dari pengguna untuk menulis data).
+- **Belum diuji**: apakah `SUPABASE_SECRET_KEY` juga sudah diset di environment produksi deploy (Vercel) — perubahan ini baru menyentuh `.env` lokal. Kalau Vercel masih pakai nama variabel lama (`SUPABASE_SERVICE_ROLE_KEY`) atau belum diset sama sekali, upload di produksi (bukan lokal) tetap akan balas `503` sampai variabel di Vercel disesuaikan.
+- Tidak menjalankan `npx eslint` di sesi ini untuk perubahan 1-baris ini (ubah nama variabel env saja, tidak ada perubahan logika/sintaks yang berisiko lint error).
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. **Perlu tindakan pengguna**: pastikan variabel `SUPABASE_SECRET_KEY` (bukan `SUPABASE_SERVICE_ROLE_KEY`) juga sudah diset di environment produksi (Vercel/hosting), kalau tidak upload gambar menu di produksi masih akan `503` meski sudah jalan di lokal.
+2. Uji end-to-end nyata: login sebagai admin di browser, upload 1 gambar PNG menu asli, pastikan URL tersimpan ke `MenuItem.image` dan gambar tampil di halaman customer.
+3. Item lama dari entri 2026-09-30 (nasib bucket `kasir` yang tidak terpakai, audit IDOR level data) masih belum dikerjakan, tidak disentuh sesi ini.
+
+---
+
+## 2026-10-03 (sesi terpisah) — Claude (Sonnet 5)
+
+### Tugas dari pengguna
+Simulasikan sistem seperti sedang dipakai langsung di restoran dengan 50 meja aktif: order/pemesanan/pembayaran/tambah pesanan, selipkan order "nakal" (orang iseng mengotak-atik sistem) dan human error (QR lama, dsb), variasikan ukuran order, jalankan berkali-kali dengan meja dipakai ulang oleh pelanggan baru — lalu cari bug (database overflow, API lambat, data tidak bisa diakses, dsb).
+
+### Catatan penting: tidak menyentuh pekerjaan sesi lain
+Saat sesi ini berjalan, terdeteksi perubahan tidak disimpan dari sesi/AI lain yang berjalan bersamaan (`CATATAN_PROYEK.md` entri sebelum ini soal `SUPABASE_SECRET_KEY`, dan `src/app/api/upload/route.js`). **Tidak disentuh/ditimpa** — entri ini hanya ditambahkan di akhir file. Tidak ada kaitan dengan simulasi di bawah.
+
+### Metode — simulasi HTTP nyata, bukan vm sandbox, bukan mock
+Dibuat `tmp/sim-live-restaurant.cjs` (skrip sekali pakai, orkestrasi penuh, bisa dijalankan ulang kapan saja dengan `node tmp/sim-live-restaurant.cjs`):
+1. Membuat cluster PostgreSQL 18 **disposable** sendiri (`initdb`/`pg_ctl`, auth trust, loopback-only, port 55513, database `kasir_sim`) — bukan `kasir_local`, bukan Supabase produksi, `.env` project sama sekali tidak disentuh/dibaca.
+2. `prisma db push` skema saat ini ke cluster itu, seed 2 akun staf (admin+kasir), 3 kategori, 20 menu (termasuk 1 menu sengaja `isAvailable:false` dan 1 menu harga Rp2.000.000.000 untuk memancing uji batas integer).
+3. Menjalankan **`next dev` sungguhan** (bukan `vm.runInContext` seperti test `*-local.cjs` sebelumnya) di port 39123, diarahkan ke cluster disposable lewat env var eksplisit — supaya seluruh stack asli (routing Next.js, session cookie HMAC, Prisma connection pool) ikut teruji, bukan cuma satu route terisolasi.
+4. Login asli lewat `POST /api/auth/login` (dapat cookie sungguhan), lalu kirim request HTTP asli (`fetch`) ke endpoint yang sama persis dipakai aplikasi: `POST /api/transaction` (buka meja), `POST /api/order` (customer anonim pesan), `PUT /api/kitchen/[id]`, `PUT /api/transaction/[id]` (bayar/batal), `GET /api/transaction/[id]`.
+5. 3 ronde × 50 "meja" (`Meja 1`..`Meja 50`), nomor meja dipakai ulang tiap ronde (meja yang baru ditutup di ronde 1 langsung "diduduki" pelanggan baru di ronde 2) — plus 1 fase tambahan "rush hour": 50 meja dibuka, 50 order pertama dikirim, dan 50 pembayaran dieksekusi **benar-benar bersamaan** (`Promise.all`, bukan dicicil) untuk memancing connection-pool habis / lambat di beban puncak sungguhan.
+6. Setiap 1 dari 10 meja per ronde diberi skenario khusus (bergantian): order besar (10 menu sekaligus), tambah pesanan bertahap 3x, flood 12 request paralel ke meja sama (uji rate limit 5/menit), rentetan payload nakal (quantity negatif/desimal/raksasa, menuItemId invalid, 200 item sekaligus, body 5MB, SQL-injection-string sebagai transactionId, cookie staf yang di-tamper, requestId format salah, menu yang sudah habis), meja kosong dibatalkan (no-show), kasir bayar pakai tagihan BASI (customer sempat nambah order sebelum klik bayar), kasir buka meja yang sama 2x nyaris bersamaan (human error dobel-klik), order vs pembayaran ditembak **persis bersamaan** ke transaksi yang sama (race yang sejak 2026-09-26 dicatat "belum pernah direproduksi lewat eksekusi paralel nyata"), dan percobaan order dengan total yang sengaja didesain melebihi batas integer Postgres (`2.147.483.647`). Meja yang pernah dipakai & ditutup di ronde sebelumnya, QR lamanya (transactionId lama) sengaja di-scan ulang di ronde berikutnya untuk mensimulasikan waiter salah kasih QR lama ke pelanggan baru.
+7. Setelah semua ronde, jalankan pemeriksaan integritas langsung ke database (bukan cuma percaya respons HTTP): cari 2 sesi aktif untuk meja yang sama, cocokkan `Transaction.total` dengan jumlah `Order.total` di dalamnya, cocokkan `Order.total` dengan jumlah `OrderItem`, cek total negatif/melebihi batas integer.
+8. Teardown otomatis: `next dev` dimatikan, cluster PostgreSQL dihentikan DAN seluruh data dir + log dihapus dari disk (auth trust = tidak ada password yang perlu "dibersihkan" sama sekali, konsisten dengan pola `*-local.cjs` sebelumnya).
+
+### Kendala teknis yang ditemukan & diperbaiki selama membuat skrip (dicatat karena berpotensi mengulang di sesi lain)
+- `pg_ctl start -w` dipanggil lewat `execFileSync(..., {stdio:'pipe'})` **hang permanen** di Windows — server Postgres-nya sendiri sukses nyala dalam <1 detik (dikonfirmasi lewat log `database system is ready to accept connections`), tapi `execFileSync` tidak pernah return karena proses `postgres.exe` yang di-fork `pg_ctl` di Windows mewarisi handle pipe stdout/stderr dan tidak pernah menutupnya. **Perbaikan**: pakai `stdio:'ignore'` khusus untuk `pg_ctl start` (dan `stop`), bukan `'pipe'`.
+- `spawnSync npx.cmd` gagal `EINVAL` (errno -4071) di Node 24 Windows — ini pengerasan keamanan Node terbaru (terkait CVE-2024-27980): spawn file `.cmd`/`.bat` langsung tanpa `shell:true` sekarang ditolak OS-level, bukan cuma warning. **Perbaikan**: tambah `shell: process.platform==='win32'` di setiap `execFileSync`/`spawn` yang memanggil `npx.cmd` (`prisma db push`, `next dev`).
+
+### Hasil (TERBUKTI lewat eksekusi nyata ke HTTP + database sungguhan, run terakhir tersimpan di `tmp/sim-live-report.json`)
+**Tidak ditemukan bug integritas data maupun crash** setelah 3 ronde × 50 meja + rush hour (total 200 transaksi, 320 order, 320 `OrderSubmission`, ratusan payload nakal):
+- **0** meja bentrok (dua sesi aktif untuk nomor meja yang sama) — baik lewat dobel-klik manusiawi maupun burst 50 `POST /api/transaction` bersamaan saat rush hour (50/50 berhasil, tidak ada yang gagal/bentrok).
+- **0** ketidakcocokan total (`Transaction.total` vs jumlah `Order.total` vs jumlah `OrderItem`) dari 200 transaksi — termasuk yang sempat kena race order-vs-pembayaran atau pembayaran dengan tagihan basi.
+- **Race order-vs-pembayaran (skenario prioritas tertinggi, sejak 2026-09-26 belum pernah dibuktikan dengan eksekusi paralel nyata) — TERBUKTI AMAN.** Pada setiap kejadian: salah satu menang (order tercatat lalu pembayaran kena `409 PAYMENT_CONFLICT` karena revisi berubah, ATAU pembayaran menang lebih dulu lalu order berikutnya kena `409 SESSION_CLOSED`) — tidak pernah dua-duanya sukses dengan data tidak sinkron. Row-lock yang ditambahkan 2026-09-24 (`src/app/api/order/route.js:101`) **terbukti bekerja di bawah concurrency HTTP sungguhan**, bukan cuma analisis kode.
+- **Pembayaran dengan tagihan basi (kasir belum refresh layar setelah customer nambah order) — TERBUKTI DITOLAK** (`409 PAYMENT_CONFLICT`), tidak pernah under-charge.
+- **Rate limit 5 kiriman/menit per meja — TERBUKTI TIDAK TEMBUS** meski ditembak 12 request paralel asli ke meja yang sama (hasil konsisten: tepat 5 lolos, 7 ditolak `429`, di setiap pengulangan).
+- **Batas total melebihi integer Postgres (2.147.483.647) — TERBUKTI DITOLAK** (`400 INVALID_TOTAL`) saat order sengaja dibuat untuk melebihinya — tidak ada risiko overflow kolom `Int` di database dari jalur ini.
+- **Seluruh payload nakal ditolak rapi (400/409), tidak ada satupun yang menyebabkan 500 atau diterima tanpa seharusnya**: quantity negatif/desimal/raksasa, `menuItemId` negatif, 200 item dalam 1 kiriman, body request 5MB, string mirip SQL injection dipakai sebagai `transactionId` (pembuktian langsung bahwa parameterized query Prisma aman — tidak ada SQL yang tereksekusi, cuma `404`-setara `SESSION_CLOSED` karena ID itu memang tidak ada), `requestId` format salah, dan order ke menu yang `isAvailable:false`.
+- **Cookie sesi staf yang di-tamper (karakter terakhir diubah) — TERBUKTI ditolak `401`**, tidak ada celah bypass.
+- **QR lama (meja yang sudah dibayar/ditutup) yang di-scan ulang di ronde berikutnya — TERBUKTI selalu dibalas status tertutup**, dan percobaan order baru ke ID lama itu selalu `409 SESSION_CLOSED` — disimulasikan ulang di ~90 kombinasi meja×ronde, tidak ada satupun yang lolos.
+- **Rush hour (50 meja dibuka + 50 order pertama + 50 pembayaran, ketiganya benar-benar bersamaan via `Promise.all`, bukan dicicil)**: 50/50/50 berhasil semua. Total waktu buka 50 meja bersamaan ≈589ms, total waktu kirim 50 order pertama bersamaan ≈623ms. **Tidak ada tanda connection-pool database habis/timeout** pada beban ini.
+- Latensi per endpoint (gabungan 4 fase × 50 meja, p50/p95/maks dalam ms, run `next dev` lokal — lihat catatan batasan di bawah): `open-table` 133/498/588, `place-order` 270/899/1105, `pay-transaction` 103/629/631, `kitchen-step` 46/193/279, `get-transaction` 100/537/566. Tidak ada yang dianggap "lambat" (ambang yang dipakai skrip: >3000ms memicu temuan PERF) kecuali 1 pengecualian di bawah.
+
+### Satu-satunya temuan — BUKAN bug aplikasi, murni artefak mode development
+- Pada run PERTAMA (sebelum cache `.next` terbentuk), request login pertama ke server yang baru saja dinyalakan (`next dev`) makan waktu **~12 detik** — ini biaya kompilasi on-demand route API pertama kali oleh Next.js dev server (webpack/Turbopack compile saat route pertama kali diakses), BUKAN representasi performa produksi. Dikonfirmasi: run KEDUA dengan cache `.next` yang sama, request yang sama hanya 435ms. Di produksi (`next build` lalu `next start`, atau deploy Vercel) semua route sudah dikompilasi di awal, jadi lonjakan 12 detik ini **tidak akan terjadi** dengan cara yang sama — dicatat di sini murni sebagai informasi, bukan item perbaikan.
+
+### Batasan simulasi ini (apa yang BELUM teruji, supaya tidak dianggap "semua sudah pasti aman")
+1. **Dijalankan di `next dev` lokal, BUKAN `next build`+`next start` dan BUKAN lingkungan produksi Vercel+Supabase pooler.** Jaringan produksi (latency ke Supabase pooler region Singapura, connection pooler PgBouncer, cold start serverless Vercel) punya karakteristik beban/latensi yang beda sama sekali dari Postgres lokal di loopback — kesimpulan "tidak ada yang lambat"/"tidak ada pool habis" di sini **tidak otomatis berlaku untuk produksi**. Kalau mau keyakinan produksi, perlu uji beban terpisah ke staging/produksi dengan izin eksplisit (berisiko menulis data).
+2. Tidak ada browser/UI sungguhan yang dites (semua lewat `fetch` langsung ke API, sama seperti pola test `*-local.cjs` sebelumnya di proyek ini) — bug yang murni di sisi render React/localStorage (mis. race UI, tombol disabled, dsb — sudah diaudit terpisah di entri-entri lama) tidak tercakup di sini.
+3. Tidak menguji upload gambar menu (di luar scope "order/pemesanan/pembayaran"), tidak menguji cetak struk/QR fisik, tidak menguji endpoint admin (kelola user/menu/kategori) — audit RBAC untuk itu sudah ada terpisah (entri 2026-09-27).
+4. Volume per ronde (50 meja, item per order ≤10, 3 ronde + 1 rush hour) adalah beban "ramai wajar + 1 lonjakan ekstrem", bukan stress test skala ribuan req/detik berkepanjangan (mis. bukan uji ketahanan 1 jam terus-menerus) — kalau mau tahu titik jebol pastinya (bukan cuma "aman sampai titik ini"), perlu dinaikkan terus volumenya sampai sesuatu benar-benar gagal.
+5. Satu proses `next dev` di laptop lokal berbagi CPU dengan AI/sesi lain yang kebetulan berjalan bersamaan (lihat catatan di atas) — angka latensi di sini bisa sedikit lebih tinggi dari kondisi laptop idle, tapi tidak mengubah kesimpulan fungsional (integritas data, race, rate limit).
+
+### Pengujian
+- `node tmp/sim-live-restaurant.cjs` dijalankan 3x selama debugging (2x gagal karena 2 bug infra Windows di atas, diperbaiki), **run terakhir PASS bersih**: `findingsCount: 0`, hasil lengkap di `tmp/sim-live-report.json`.
+- Dikonfirmasi setelah setiap run: tidak ada proses `postgres.exe`/cluster disposable yang tertinggal, direktori data cluster (`tmp/pgdata-sim-*`) terhapus otomatis oleh teardown. `.env`, `kasir_local`, dan Supabase produksi **tidak pernah disentuh** sepanjang sesi ini.
+- Skrip (`tmp/sim-live-restaurant.cjs`) sengaja ditinggal di `tmp/` (bukan `tests/`) karena ini simulasi sekali-pakai sesuai permintaan, bukan infrastruktur test permanen — bisa dijalankan ulang kapan saja (`node tmp/sim-live-restaurant.cjs`, butuh binary PostgreSQL 18 di `C:\Program Files\PostgreSQL\18\bin`, otomatis bikin & hapus cluster sendiri, tidak butuh argumen).
+
+### Pekerjaan belum selesai / langkah berikutnya
+1. Kalau pengguna mau keyakinan untuk lingkungan PRODUKSI (bukan cuma lokal) — perlu keputusan eksplisit: uji beban serupa ke staging, atau terima bahwa hasil ini hanya membuktikan *logika aplikasi* benar (race/limit/validasi), bukan *performa infrastruktur produksi*.
+2. Opsional: naikkan volume (lebih dari 50 meja, lebih banyak ronde, durasi lebih lama) kalau tujuannya mencari titik jebol pasti, bukan sekadar membuktikan beban wajar+lonjakan aman.
+3. Item-item lama dari entri-entri sebelumnya (statistik item terhapus, kitchenStatus reset saat edit, kredensial dev di halaman login, dll — lihat ringkasan prioritas 2026-09-26) tidak disentuh sesi ini, masih berlaku.

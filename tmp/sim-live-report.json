@@ -1,0 +1,473 @@
+{
+  "seedMenuCount": 20,
+  "rounds": 3,
+  "tables": 50,
+  "rushHour": {
+    "openedOk": 50,
+    "openTotalMs": 589,
+    "orderedOk": 50,
+    "orderTotalMs": 623,
+    "paidOk": 50
+  },
+  "integrity": {
+    "openTableCount": 0,
+    "duplicateTableConflicts": [],
+    "mismatchCount": 0,
+    "negativeCount": 0,
+    "overMaxCount": 0,
+    "submissionCount": 320,
+    "orderCount": 320,
+    "txCount": 200
+  },
+  "perf": {
+    "login": {
+      "count": 2,
+      "errors": 0,
+      "p50": 435,
+      "p95": 435,
+      "max": 435
+    },
+    "open-table": {
+      "count": 216,
+      "errors": 0,
+      "p50": 132.5,
+      "p95": 498,
+      "max": 587.7
+    },
+    "place-order": {
+      "count": 515,
+      "errors": 0,
+      "p50": 270.1,
+      "p95": 899.3,
+      "max": 1104.7
+    },
+    "malicious-order": {
+      "count": 165,
+      "errors": 0,
+      "p50": 42.6,
+      "p95": 137.7,
+      "max": 162.4
+    },
+    "cancel-transaction": {
+      "count": 15,
+      "errors": 0,
+      "p50": 262.7,
+      "p95": 337.9,
+      "max": 337.9
+    },
+    "get-transaction": {
+      "count": 410,
+      "errors": 0,
+      "p50": 100,
+      "p95": 536.6,
+      "max": 566
+    },
+    "kitchen-step": {
+      "count": 344,
+      "errors": 0,
+      "p50": 45.8,
+      "p95": 193.3,
+      "max": 279.3
+    },
+    "pay-transaction": {
+      "count": 230,
+      "errors": 0,
+      "p50": 102.7,
+      "p95": 628.9,
+      "max": 630.5
+    },
+    "malicious-huge-body": {
+      "count": 15,
+      "errors": 0,
+      "p50": 193.1,
+      "p95": 229.1,
+      "max": 229.1
+    }
+  },
+  "findingsCount": 0,
+  "findings": [],
+  "sampleReports": [
+    {
+      "tableNumber": "Meja 1",
+      "round": 1,
+      "scenario": 0,
+      "events": [],
+      "transactionId": "d42d43b0-bd79-4bc7-9a10-bdbc985392d3",
+      "heavyOrder": {
+        "status": 200,
+        "itemCount": 10
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 2",
+      "round": 1,
+      "scenario": 1,
+      "events": [],
+      "transactionId": "538511ef-5d30-430f-8a72-00a42431055a",
+      "addon": {
+        "statuses": [
+          200,
+          200,
+          200
+        ]
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 3",
+      "round": 1,
+      "scenario": 2,
+      "events": [],
+      "transactionId": "c28f1102-964a-41c4-bfb9-c319caef1381",
+      "flood": {
+        "okCount": 5,
+        "limited": 7,
+        "statuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          429,
+          429,
+          429,
+          429,
+          429,
+          429,
+          429
+        ]
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 4",
+      "round": 1,
+      "scenario": 3,
+      "events": [],
+      "transactionId": "c99d77a4-ff1c-411c-93d0-fae662ca3794",
+      "maliciousResults": [
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"43c651cf-8f"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"180f26ea-3b"
+        },
+        {
+          "status": 400,
+          "code": "ORDER_LIMIT",
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"cebe22db-03"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"dfce8ce9-6b"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"c4217ea6-e9"
+        },
+        {
+          "status": 409,
+          "code": "SESSION_CLOSED",
+          "note": "{\"transactionId\":\"'); DROP TABLE \\\"Transaction\\\"; --\",\"requestId\":\"b1a48e71-7169"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"short\",\"ite"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"40c77f35-b6"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"3952ff91-8b"
+        },
+        {
+          "status": 409,
+          "code": "MENU_UNAVAILABLE",
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"fce65570-51"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"c99d77a4-ff1c-411c-93d0-fae662ca3794\",\"requestId\":\"81c70931-c5"
+        },
+        {
+          "status": 200,
+          "note": "huge-5MB-body"
+        }
+      ],
+      "tamperedCookieStatus": 401,
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 5",
+      "round": 1,
+      "scenario": 4,
+      "events": [],
+      "transactionId": "8396fff1-1e41-4687-a3ba-cd020063b559",
+      "noShowCancel": 200
+    },
+    {
+      "tableNumber": "Meja 6",
+      "round": 1,
+      "scenario": 5,
+      "events": [],
+      "transactionId": "26b09f34-f717-44b8-b6d1-60907be21e56",
+      "stalePayment": {
+        "status": 409,
+        "code": "PAYMENT_CONFLICT"
+      },
+      "stalePaymentRetry": 200
+    },
+    {
+      "tableNumber": "Meja 7",
+      "round": 1,
+      "scenario": 6,
+      "events": [],
+      "doubleOpen": {
+        "s1": 200,
+        "s2": 409
+      },
+      "transactionId": "1bd2373f-48c8-49e7-82cf-f0c7cd85caba",
+      "normalOrder": {
+        "status": 200
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 8",
+      "round": 1,
+      "scenario": 7,
+      "events": [],
+      "transactionId": "c7dc740c-f6c1-4fe4-9d15-f5659ac21820",
+      "race": {
+        "orderStatus": 200,
+        "payStatus": 409
+      },
+      "raceConsistency": {
+        "transactionTotal": 28000,
+        "sumOrders": 28000,
+        "paidTotal": null,
+        "status": "ordered"
+      },
+      "raceFinalPay": 200
+    },
+    {
+      "tableNumber": "Meja 9",
+      "round": 1,
+      "scenario": 8,
+      "events": [],
+      "transactionId": "7eefdbf0-3733-4733-ab7e-c21504a147a7",
+      "overflowAttempt": {
+        "status": 400,
+        "code": "INVALID_TOTAL"
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 10",
+      "round": 1,
+      "scenario": 9,
+      "events": [],
+      "transactionId": "6fcd4360-7159-4a4e-8b9b-cf042924548e",
+      "normalOrder": {
+        "status": 200
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 11",
+      "round": 1,
+      "scenario": 0,
+      "events": [],
+      "transactionId": "65156e9c-0160-4197-84eb-84b72849a690",
+      "heavyOrder": {
+        "status": 200,
+        "itemCount": 10
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 12",
+      "round": 1,
+      "scenario": 1,
+      "events": [],
+      "transactionId": "de22f033-268f-4c79-8b89-d9eb6e4b5cc1",
+      "addon": {
+        "statuses": [
+          200,
+          200,
+          200
+        ]
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 13",
+      "round": 1,
+      "scenario": 2,
+      "events": [],
+      "transactionId": "402fd9ab-4973-405b-965f-25dd7eb26538",
+      "flood": {
+        "okCount": 5,
+        "limited": 7,
+        "statuses": [
+          200,
+          200,
+          200,
+          429,
+          200,
+          200,
+          429,
+          429,
+          429,
+          429,
+          429,
+          429
+        ]
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 14",
+      "round": 1,
+      "scenario": 3,
+      "events": [],
+      "transactionId": "6e3e6416-6682-428a-8a99-d432edecf403",
+      "maliciousResults": [
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"c86b970f-93"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"9e077907-ea"
+        },
+        {
+          "status": 400,
+          "code": "ORDER_LIMIT",
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"47e400fb-2f"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"742c31b2-95"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"b01ac337-5b"
+        },
+        {
+          "status": 409,
+          "code": "SESSION_CLOSED",
+          "note": "{\"transactionId\":\"'); DROP TABLE \\\"Transaction\\\"; --\",\"requestId\":\"fb86f09e-2055"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"short\",\"ite"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"914bdd92-d3"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"38aa2f66-2a"
+        },
+        {
+          "status": 409,
+          "code": "MENU_UNAVAILABLE",
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"2cb93386-56"
+        },
+        {
+          "status": 400,
+          "note": "{\"transactionId\":\"6e3e6416-6682-428a-8a99-d432edecf403\",\"requestId\":\"d2752b85-93"
+        },
+        {
+          "status": 200,
+          "note": "huge-5MB-body"
+        }
+      ],
+      "tamperedCookieStatus": 401,
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 15",
+      "round": 1,
+      "scenario": 4,
+      "events": [],
+      "transactionId": "d16374dc-e540-4e1a-823b-a7fb4d0fba82",
+      "noShowCancel": 200
+    },
+    {
+      "tableNumber": "Meja 16",
+      "round": 1,
+      "scenario": 5,
+      "events": [],
+      "transactionId": "2fb42261-346a-4f14-8a93-1a430ff1bed5",
+      "stalePayment": {
+        "status": 409,
+        "code": "PAYMENT_CONFLICT"
+      },
+      "stalePaymentRetry": 200
+    },
+    {
+      "tableNumber": "Meja 17",
+      "round": 1,
+      "scenario": 6,
+      "events": [],
+      "doubleOpen": {
+        "s1": 200,
+        "s2": 409
+      },
+      "transactionId": "2922ac3e-85a5-47df-a22c-e3decd23e4cf",
+      "normalOrder": {
+        "status": 200
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 18",
+      "round": 1,
+      "scenario": 7,
+      "events": [],
+      "transactionId": "18fe7a33-8e16-4771-ab5b-fedbe6eb5cab",
+      "race": {
+        "orderStatus": 200,
+        "payStatus": 409
+      },
+      "raceConsistency": {
+        "transactionTotal": 90000,
+        "sumOrders": 90000,
+        "paidTotal": null,
+        "status": "ordered"
+      },
+      "raceFinalPay": 200
+    },
+    {
+      "tableNumber": "Meja 19",
+      "round": 1,
+      "scenario": 8,
+      "events": [],
+      "transactionId": "5dedcab4-ac55-4a46-99ea-2ddc0b8acb20",
+      "overflowAttempt": {
+        "status": 400,
+        "code": "INVALID_TOTAL"
+      },
+      "finalPayStatus": 200
+    },
+    {
+      "tableNumber": "Meja 20",
+      "round": 1,
+      "scenario": 9,
+      "events": [],
+      "transactionId": "fe96f7db-ebf0-4ce5-bce1-22838149945a",
+      "normalOrder": {
+        "status": 200
+      },
+      "finalPayStatus": 200
+    }
+  ]
+}

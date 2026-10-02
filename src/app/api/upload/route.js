@@ -11,7 +11,7 @@ export async function POST(request) {
   if (denied) return denied;
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = process.env.SUPABASE_SECRET_KEY;
     if (!supabaseUrl || !supabaseKey) return NextResponse.json({ error: 'Upload belum dikonfigurasi. Hubungi admin sistem.' }, { status: 503 });
     const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
     let formData;
